@@ -1,23 +1,28 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, Building2, Bell, User, ChevronDown, UserCheck, Shield, Repeat } from "lucide-react";
+import { Menu, Building2, Bell, User, ChevronDown, LogOut } from "lucide-react";
 import { useRole } from "../context/RoleContext";
+import { useAuth } from "../context/AuthContext";
 
 export default function TopNavbar({ sidebarOpen, setSidebarOpen, title }) {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
-  const { role, setRole } = useRole();
+  const { role } = useRole();
+  const { profile, signOut } = useAuth();
   const navigate = useNavigate();
 
-  const handleRoleSwitch = (targetRole) => {
-    setRole(targetRole);
-    setProfileDropdownOpen(false);
-    if (targetRole === "kabag") {
-      navigate("/rekap-bulanan");
-    } else {
-      navigate("/input-transaksi");
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (e) {
+      console.error(e);
     }
+    navigate("/login");
   };
+
+  const displayName = profile?.full_name || (role === "kabag" ? "Kepala Bagian" : "Pegawai BSI");
+  const displayEmployeeId = profile?.employee_id ? ` (${profile.employee_id})` : "";
+  const displayRoleLabel = (profile?.role || role) === "kabag" ? "Kepala Bagian" : "Pegawai";
 
   return (
     <header className="bg-white border-b border-slate-200 h-16 sticky top-0 z-30 px-4 lg:px-6 flex items-center justify-between shadow-xs">
@@ -60,7 +65,7 @@ export default function TopNavbar({ sidebarOpen, setSidebarOpen, title }) {
           )}
         </div>
 
-        {/* Notification Bell (Only for Pegawai or Kabag) */}
+        {/* Notification Bell */}
         {role === "pegawai" && (
           <button className="relative p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer" title="Notifikasi">
             <Bell className="w-5 h-5" />
@@ -70,7 +75,7 @@ export default function TopNavbar({ sidebarOpen, setSidebarOpen, title }) {
           </button>
         )}
 
-        {/* User Profile & Role Switcher */}
+        {/* User Profile Info */}
         <div className="relative border-l border-slate-200 pl-3">
           <button
             onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
@@ -80,11 +85,11 @@ export default function TopNavbar({ sidebarOpen, setSidebarOpen, title }) {
               <User className="w-4 h-4" />
             </div>
             <div className="hidden sm:flex flex-col text-left leading-tight">
-              <span className="font-bold text-slate-800 text-xs">
-                {role === "kabag" ? "Kepala Bagian" : "Vanny"}
+              <span className="font-bold text-slate-800 text-xs truncate max-w-[120px]">
+                {displayName}
               </span>
               <span className="text-[11px] text-slate-500 font-medium">
-                {role === "kabag" ? "Kepala Bagian" : "Pegawai"}
+                {displayRoleLabel}
               </span>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -94,47 +99,24 @@ export default function TopNavbar({ sidebarOpen, setSidebarOpen, title }) {
             <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 text-xs space-y-1">
               <div className="px-4 py-2.5 border-b border-slate-100">
                 <div className="font-bold text-slate-800">
-                  {role === "kabag" ? "Kepala Bagian BSI" : "Vanny (BSI-801)"}
+                  {displayName} {displayEmployeeId}
                 </div>
                 <div className="text-[11px] text-slate-500">KC PEKANBARU SUDIRMAN 1</div>
-              </div>
-
-              {/* Role Switcher Option */}
-              <div className="px-3 py-1">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 px-1">
-                  Pilih Peran Akun:
+                <div className="mt-1">
+                  <span className="inline-block px-2 py-0.5 rounded-md bg-[#e6f5f5] text-[#00a0a0] text-[10px] font-bold">
+                    {displayRoleLabel}
+                  </span>
                 </div>
-                <button
-                  onClick={() => handleRoleSwitch("pegawai")}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between font-semibold transition-colors ${
-                    role === "pegawai" ? "bg-[#e6f5f5] text-[#00a0a0]" : "text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <UserCheck className="w-4 h-4" />
-                    <span>Pegawai (Foto 1)</span>
-                  </div>
-                  {role === "pegawai" && <span className="w-2 h-2 rounded-full bg-[#00a0a0]"></span>}
-                </button>
-
-                <button
-                  onClick={() => handleRoleSwitch("kabag")}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between font-semibold transition-colors mt-1 ${
-                    role === "kabag" ? "bg-[#e6f5f5] text-[#00a0a0]" : "text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <Shield className="w-4 h-4" />
-                    <span>Kepala Bagian (Foto 2)</span>
-                  </div>
-                  {role === "kabag" && <span className="w-2 h-2 rounded-full bg-[#00a0a0]"></span>}
-                </button>
               </div>
 
-              <div className="border-t border-slate-100 pt-1">
-                <a href="/login" className="block px-4 py-2 text-rose-600 hover:bg-rose-50 font-semibold">
-                  Keluar Akun
-                </a>
+              <div className="pt-1">
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-4 py-2 text-rose-600 hover:bg-rose-50 font-semibold flex items-center space-x-2 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Keluar Akun</span>
+                </button>
               </div>
             </div>
           )}

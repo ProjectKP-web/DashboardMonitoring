@@ -109,12 +109,12 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed lg:static top-0 left-0 bottom-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col transition-transform duration-200 ease-in-out ${
+        className={`fixed lg:sticky top-0 lg:top-16 left-0 bottom-0 lg:bottom-auto z-50 lg:z-20 w-64 min-w-[16rem] max-w-[16rem] h-full lg:h-[calc(100vh-4rem)] shrink-0 bg-white border-r border-slate-200 flex flex-col transition-transform duration-200 ease-in-out ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        {/* Logo Section */}
-        <div className="h-20 border-b border-slate-100 px-4 flex items-center justify-between">
+        {/* Logo Section (Mobile Only) */}
+        <div className="h-16 border-b border-slate-100 px-4 flex items-center justify-between lg:hidden">
           <div className="flex items-center">
             <img
               src={bsiLogo}

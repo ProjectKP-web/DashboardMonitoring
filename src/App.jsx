@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import Loading from "./components/Loading";
 import { RoleProvider } from "./context/RoleContext";
+import { AuthProvider } from "./context/AuthContext";
 
 function App() {
   // Pegawai Portal Pages
@@ -42,10 +43,11 @@ function App() {
 
   return (
     <RoleProvider>
-      <Suspense fallback={<Loading />}>
+      <AuthProvider>
+        <Suspense fallback={<Loading />}>
         <Routes>
           {/* Entry routes */}
-          <Route path="/" element={<Navigate to="/input-transaksi" replace />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/guest" element={<Guest />} />
           <Route path="/member" element={<Member />} />
 
@@ -84,8 +86,9 @@ function App() {
           </Route>
         </Routes>
       </Suspense>
-    </RoleProvider>
-  );
+    </AuthProvider>
+  </RoleProvider>
+);
 }
 
 export default App;
