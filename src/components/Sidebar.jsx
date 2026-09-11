@@ -8,10 +8,7 @@ import {
   History,
   CalendarCheck,
   Activity,
-  FileDown,
-  Settings,
   User,
-  KeyRound,
   Headphones,
   X
 } from "lucide-react";
@@ -22,7 +19,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const location = useLocation();
   const { role } = useRole();
 
-  // Pegawai Sidebar Menu (Foto 1)
+  // Pegawai Sidebar Menu
   const pegawaiNavGroups = [
     {
       group: "DASHBOARD",
@@ -46,13 +43,12 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
     {
       group: "PENGATURAN",
       items: [
-        { label: "Profil Saya", path: "/profil-saya", icon: User },
-        { label: "Ubah Password", path: "/ubah-password", icon: KeyRound }
+        { label: "Profil Saya", path: "/profil-saya", icon: User }
       ]
     }
   ];
 
-  // Kepala Bagian Sidebar Menu (Foto 2)
+  // Kepala Bagian Sidebar Menu
   const kabagNavGroups = [
     {
       group: null,
@@ -81,16 +77,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       ]
     },
     {
-      group: "LAPORAN",
-      items: [
-        { label: "Export Laporan", path: "/export-laporan", icon: FileDown },
-        { label: "Riwayat Export", path: "/riwayat-export", icon: History }
-      ]
-    },
-    {
       group: "PENGATURAN",
       items: [
-        { label: "Pengaturan", path: "/pengaturan", icon: Settings }
+        { label: "Profil Saya", path: "/profil-saya", icon: User }
       ]
     }
   ];

@@ -10,7 +10,7 @@ export default function Login() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isNetworkError, setIsNetworkError] = useState(false);
 
-  const { signIn, loginAsDemo, isConfigured } = useAuth();
+  const { signIn, loginAsDemo, isConfigured, idleExpired, clearIdleNotice } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -24,11 +24,13 @@ export default function Login() {
       setLoading(true);
       setErrorMsg("");
       setIsNetworkError(false);
+      if (clearIdleNotice) clearIdleNotice();
 
       const { profile } = await signIn({ identifier, password });
 
       // Check role from profile and redirect automatically to Dashboard
-      if (profile?.role === "kabag") {
+      const isKabagUser = profile?.role === "kabag" || profile?.role === "kepala_bagian";
+      if (isKabagUser) {
         navigate("/dashboard");
       } else {
         navigate("/dashboard-saya");
@@ -51,6 +53,7 @@ export default function Login() {
   };
 
   const handleDemoLogin = (role) => {
+    if (clearIdleNotice) clearIdleNotice();
     loginAsDemo(role, role === "kabag" ? "Kepala Bagian BSI" : "Pegawai BSI", identifier || "BSI-801");
     if (role === "kabag") {
       navigate("/dashboard");
@@ -65,6 +68,16 @@ export default function Login() {
         <h2 className="text-xl font-bold text-slate-800">Masuk ke Dashboard</h2>
         <p className="text-xs text-slate-500">Dashboard Monitoring BSI</p>
       </div>
+
+      {idleExpired && (
+        <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start space-x-2 shadow-xs">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold block text-amber-950">Sesi Berakhir Otomatis</span>
+            Sesi Anda telah keluar secara otomatis karena tidak ada aktivitas (inactivity timeout). Silakan masuk kembali.
+          </div>
+        </div>
+      )}
 
       {!isConfigured && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start space-x-2">
@@ -114,14 +127,14 @@ export default function Login() {
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
-            NIP / Email Terdaftar
+            Email / NIP
           </label>
           <input
             type="text"
             required
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            placeholder="Masukkan NIP atau Email Anda"
+            placeholder="Masukkan Email atau NIP"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
           />
         </div>
@@ -135,7 +148,7 @@ export default function Login() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
+            placeholder="Masukkan Kata Sandi"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
           />
         </div>

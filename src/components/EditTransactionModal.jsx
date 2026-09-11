@@ -10,13 +10,13 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
   const [keterangan, setKeterangan] = useState("");
 
   const daftarProduk = [
-    { code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
-    { code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
-    { code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
-    { code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
-    { code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
-    { code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
-    { code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" }
+    { id: 1, code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
+    { id: 2, code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
+    { id: 3, code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
+    { id: 4, code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
+    { id: 5, code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
+    { id: 6, code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
+    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" }
   ];
 
   useEffect(() => {
@@ -24,8 +24,8 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
       setTanggal(transaction.tanggal || "");
       setProduk(transaction.produkCode || transaction.produk || "RB");
       setNoa(transaction.noa || 1);
-      setNominal(transaction.nominalRaw || "");
-      setGram(transaction.gramRaw || "");
+      setNominal(transaction.nominalRaw !== undefined && transaction.nominalRaw !== null ? transaction.nominalRaw : "");
+      setGram(transaction.gramRaw !== undefined && transaction.gramRaw !== null ? transaction.gramRaw : "");
       setKeterangan(transaction.keterangan || "");
     }
   }, [transaction]);
@@ -36,14 +36,17 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const selectedProd = daftarProduk.find((p) => p.code === produk || p.id === Number(produk));
     onSave({
       ...transaction,
       tanggal,
-      produk,
+      product_id: selectedProd?.id || transaction.product_id || 1,
+      produk: selectedProd?.name || produk,
+      produkCode: selectedProd?.code || produk,
       noa: Number(noa),
-      nominal: selectedProd?.unit === "nominal" ? Number(nominal).toLocaleString("id-ID") : "-",
+      nominal: selectedProd?.unit === "nominal" && nominal ? Number(nominal).toLocaleString("id-ID") : "-",
       nominalRaw: nominal,
-      gram: selectedProd?.unit === "gram" ? Number(gram).toFixed(2).replace(".", ",") : "-",
+      gram: selectedProd?.unit === "gram" && gram ? Number(gram).toFixed(2).replace(".", ",") : "-",
       gramRaw: gram,
       keterangan
     });
@@ -122,15 +125,7 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
             )}
           </div>
 
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1 text-xs">Keterangan</label>
-            <textarea
-              rows="2"
-              value={keterangan}
-              onChange={(e) => setKeterangan(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium text-xs focus:ring-2 focus:ring-[#009688] outline-hidden"
-            />
-          </div>
+
 
           <div className="flex justify-end space-x-3 pt-2">
             <button

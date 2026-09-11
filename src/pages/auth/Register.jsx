@@ -133,21 +133,21 @@ export default function Register() {
             required
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            placeholder="Contoh: Vanny Meliyana"
+            placeholder="Masukkan Nama Lengkap"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
           />
         </div>
 
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
-            NIP / Username
+            NIP Pegawai
           </label>
           <input
             type="text"
             required
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
-            placeholder="Contoh: BSI-801"
+            placeholder="Masukkan NIP"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
           />
         </div>
@@ -161,7 +161,7 @@ export default function Register() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="nama@bankbsi.co.id"
+            placeholder="Masukkan Email"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
           />
         </div>
@@ -176,7 +176,7 @@ export default function Register() {
             minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
+            placeholder="Masukkan Kata Sandi"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
           />
         </div>

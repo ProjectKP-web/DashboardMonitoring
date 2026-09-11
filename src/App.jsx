@@ -3,7 +3,70 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import Loading from "./components/Loading";
 import { RoleProvider } from "./context/RoleContext";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { useRole } from "./context/RoleContext";
+
+// Auth Guard component for protected pages
+function ProtectedRoute({ children }) {
+  const { user, profile, loading, isDemoMode } = useAuth();
+
+  if (loading) {
+    return <Loading />;
+  }
+
+  if (!user && !profile && !isDemoMode) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
+// Role Guard for Kabag-only pages
+function KabagRoute({ children }) {
+  const { profile } = useAuth();
+  const { role } = useRole();
+
+  const userRole = profile?.role || role;
+  const isKabagUser = userRole === "kabag" || userRole === "kepala_bagian";
+
+  if (!isKabagUser) {
+    return <Navigate to="/dashboard-saya" replace />;
+  }
+
+  return children;
+}
+
+// Role Guard for Pegawai-only pages
+function PegawaiRoute({ children }) {
+  const { profile } = useAuth();
+  const { role } = useRole();
+
+  const userRole = profile?.role || role;
+  const isKabagUser = userRole === "kabag" || userRole === "kepala_bagian";
+
+  if (isKabagUser) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+}
+
+// Public Guard component for login/register pages
+function PublicRoute({ children }) {
+  const { user, profile, loading, isDemoMode } = useAuth();
+  const { role } = useRole();
+
+  if (loading) {
+    return <Loading />;
+  }
+
+  if (user || profile || isDemoMode) {
+    const isKabagUser = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag";
+    return <Navigate to={isKabagUser ? "/dashboard" : "/dashboard-saya"} replace />;
+  }
+
+  return children;
+}
 
 function App() {
   // Pegawai Portal Pages
@@ -12,7 +75,6 @@ function App() {
   const RiwayatTransaksi = lazy(() => import("./pages/RiwayatTransaksi"));
   const RekapBulananSaya = lazy(() => import("./pages/RekapBulananSaya"));
   const ProfilSaya = lazy(() => import("./pages/ProfilSaya"));
-  const UbahPassword = lazy(() => import("./pages/UbahPassword"));
 
   // Kabag / Overview Pages
   const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -20,11 +82,8 @@ function App() {
   const MonitoringHarian = lazy(() => import("./pages/MonitoringHarian"));
   const Pegawai = lazy(() => import("./pages/Pegawai"));
   const Produk = lazy(() => import("./pages/Produk"));
-  const ExportLaporan = lazy(() => import("./pages/ExportLaporan"));
-  const RiwayatExport = lazy(() => import("./pages/RiwayatExport"));
-  const Pengaturan = lazy(() => import("./pages/Pengaturan"));
 
-  // Portal & Error pages
+  // Error pages
   const Guest = lazy(() => import("./pages/Guest"));
   const Member = lazy(() => import("./pages/Member"));
   const NotFound = lazy(() => import("./pages/NotFound"));
@@ -45,50 +104,59 @@ function App() {
     <RoleProvider>
       <AuthProvider>
         <Suspense fallback={<Loading />}>
-        <Routes>
-          {/* Entry routes */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/guest" element={<Guest />} />
-          <Route path="/member" element={<Member />} />
+          <Routes>
+            {/* Default root entry route */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/guest" element={<Guest />} />
+            <Route path="/member" element={<Member />} />
 
-          {/* Main Dashboard Layout */}
-          <Route element={<MainLayout />}>
-            {/* Pegawai Portal Routes */}
-            <Route path="/dashboard-saya" element={<DashboardSaya />} />
-            <Route path="/input-transaksi" element={<InputTransaksi />} />
-            <Route path="/riwayat-transaksi" element={<RiwayatTransaksi />} />
-            <Route path="/rekap-bulanan-saya" element={<RekapBulananSaya />} />
-            <Route path="/profil-saya" element={<ProfilSaya />} />
-            <Route path="/ubah-password" element={<UbahPassword />} />
+            {/* Protected Main Dashboard Layout */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <MainLayout />
+                </ProtectedRoute>
+              }
+            >
+              {/* Pegawai Routes */}
+              <Route path="/dashboard-saya" element={<PegawaiRoute><DashboardSaya /></PegawaiRoute>} />
+              <Route path="/input-transaksi" element={<PegawaiRoute><InputTransaksi /></PegawaiRoute>} />
+              <Route path="/riwayat-transaksi" element={<PegawaiRoute><RiwayatTransaksi /></PegawaiRoute>} />
+              <Route path="/rekap-bulanan-saya" element={<PegawaiRoute><RekapBulananSaya /></PegawaiRoute>} />
+              <Route path="/profil-saya" element={<ProfilSaya />} />
+              <Route path="/ubah-password" element={<Navigate to="/profil-saya" replace />} />
 
-            {/* Monitoring Kabag Routes */}
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/rekap-bulanan" element={<RekapBulanan />} />
-            <Route path="/monitoring-harian" element={<MonitoringHarian />} />
-            <Route path="/pegawai" element={<Pegawai />} />
-            <Route path="/produk" element={<Produk />} />
-            <Route path="/export-laporan" element={<ExportLaporan />} />
-            <Route path="/riwayat-export" element={<RiwayatExport />} />
-            <Route path="/pengaturan" element={<Pengaturan />} />
+              {/* Kabag Routes */}
+              <Route path="/dashboard" element={<KabagRoute><Dashboard /></KabagRoute>} />
+              <Route path="/rekap-bulanan" element={<KabagRoute><RekapBulanan /></KabagRoute>} />
+              <Route path="/monitoring-harian" element={<KabagRoute><MonitoringHarian /></KabagRoute>} />
+              <Route path="/pegawai" element={<KabagRoute><Pegawai /></KabagRoute>} />
+              <Route path="/produk" element={<KabagRoute><Produk /></KabagRoute>} />
 
-            {/* Error pages */}
-            <Route path="/400" element={<Error400 />} />
-            <Route path="/401" element={<Error401 />} />
-            <Route path="/403" element={<Error403 />} />
-            <Route path="*" element={<NotFound />} />
-          </Route>
+              {/* Error pages */}
+              <Route path="/400" element={<Error400 />} />
+              <Route path="/401" element={<Error401 />} />
+              <Route path="/403" element={<Error403 />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
 
-          {/* Auth Layout */}
-          <Route element={<AuthLayout />}>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/forgot" element={<Forgot />} />
-          </Route>
-        </Routes>
-      </Suspense>
-    </AuthProvider>
-  </RoleProvider>
-);
+            {/* Public Auth Layout */}
+            <Route
+              element={
+                <PublicRoute>
+                  <AuthLayout />
+                </PublicRoute>
+              }
+            >
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/forgot" element={<Forgot />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </AuthProvider>
+    </RoleProvider>
+  );
 }
 
 export default App;

@@ -5,15 +5,62 @@ import { useRole } from "./RoleContext";
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [user, setUser] = useState(() => {
+    const saved = sessionStorage.getItem("bsi_demo_user");
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [profile, setProfile] = useState(() => {
+    const saved = sessionStorage.getItem("bsi_demo_profile");
+    return saved ? JSON.parse(saved) : null;
+  });
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(() => {
+    return sessionStorage.getItem("bsi_demo_mode") === "true";
+  });
+  const [idleExpired, setIdleExpired] = useState(false);
   const { setRole } = useRole();
 
+  // Inactivity / Idle Logout Timer (Default: 15 Menit = 900,000 ms)
+  const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+
+  useEffect(() => {
+    // Only run idle timer if user is logged in
+    if (!user && !profile && !isDemoMode) return;
+
+    let timer;
+
+    const performAutoLogout = async () => {
+      console.warn("🔒 Auto logout triggered due to inactivity (15 mins idle)");
+      await signOut();
+      setIdleExpired(true);
+    };
+
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(performAutoLogout, IDLE_TIMEOUT_MS);
+    };
+
+    // Events to track user activity
+    const activityEvents = ["mousemove", "keydown", "click", "scroll", "touchstart", "wheel"];
+
+    activityEvents.forEach((evt) => {
+      window.addEventListener(evt, resetTimer, { passive: true });
+    });
+
+    // Start timer on initial mount/login
+    resetTimer();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      activityEvents.forEach((evt) => {
+        window.removeEventListener(evt, resetTimer);
+      });
+    };
+  }, [user, profile, isDemoMode]);
+
   // Helper to fetch user profile from profiles or users table
-  const fetchUserProfile = async (userId, userEmail = "") => {
+  const fetchUserProfile = async (userId, userEmail = "", userMeta = {}) => {
     if (!isSupabaseConfigured || !userId) return null;
 
     try {
@@ -36,17 +83,26 @@ export function AuthProvider({ children }) {
         }
       }
 
+      const metaNip = userMeta?.nip || userMeta?.NIP || userMeta?.employee_id;
+      const metaName = userMeta?.full_name;
+
       if (data) {
-        // Normalisasikan bidang nip / employee_id
+        // Normalisasikan bidang nip / NIP / employee_id & role
+        const nipVal = data.NIP || data.nip || data.employee_id || metaNip || "-";
+        const rawRole = data.role || userMeta?.role || "pegawai";
+        const isKabagRole = rawRole === "kepala_bagian" || rawRole === "kabag" || rawRole === "kepala";
+        const normalizedRole = isKabagRole ? "kabag" : rawRole;
+
         const normalizedProfile = {
           ...data,
-          nip: data.nip || data.employee_id || "-",
-          employee_id: data.employee_id || data.nip || "-",
+          role: normalizedRole,
+          nip: nipVal,
+          NIP: nipVal,
+          employee_id: nipVal,
+          full_name: data.full_name || metaName || (userEmail ? userEmail.split("@")[0] : "Pengguna"),
         };
         setProfile(normalizedProfile);
-        if (data.role) {
-          setRole(data.role); // Sync role to RoleContext
-        }
+        setRole(normalizedRole); // Sync role to RoleContext
         return normalizedProfile;
       }
     } catch (err) {
@@ -54,16 +110,22 @@ export function AuthProvider({ children }) {
     }
 
     // Default profile fallback if DB fetch returns empty
+    const nipVal = userMeta?.nip || userMeta?.NIP || userMeta?.employee_id || "-";
+    const rawRole = userMeta?.role || "pegawai";
+    const isKabagRole = rawRole === "kepala_bagian" || rawRole === "kabag" || rawRole === "kepala";
+    const normalizedRole = isKabagRole ? "kabag" : rawRole;
+
     const fallbackProfile = {
       id: userId,
       email: userEmail,
-      full_name: userEmail ? userEmail.split("@")[0] : "Pengguna",
-      nip: "-",
-      employee_id: "-",
-      role: "pegawai",
+      full_name: userMeta?.full_name || (userEmail ? userEmail.split("@")[0] : "Pengguna"),
+      nip: nipVal,
+      NIP: nipVal,
+      employee_id: nipVal,
+      role: normalizedRole,
     };
     setProfile(fallbackProfile);
-    setRole("pegawai");
+    setRole(normalizedRole);
     return fallbackProfile;
   };
 
@@ -78,9 +140,12 @@ export function AuthProvider({ children }) {
       .getSession()
       .then(({ data: { session } }) => {
         setSession(session);
-        setUser(session?.user ?? null);
         if (session?.user) {
-          fetchUserProfile(session.user.id, session.user.email);
+          setUser(session.user);
+          fetchUserProfile(session.user.id, session.user.email, session.user.user_metadata);
+        } else if (!isDemoMode) {
+          setUser(null);
+          setProfile(null);
         }
         setLoading(false);
       })
@@ -93,10 +158,11 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
-      setUser(session?.user ?? null);
       if (session?.user) {
-        await fetchUserProfile(session.user.id, session.user.email);
-      } else {
+        setUser(session.user);
+        await fetchUserProfile(session.user.id, session.user.email, session.user.user_metadata);
+      } else if (!sessionStorage.getItem("bsi_demo_mode")) {
+        setUser(null);
         setProfile(null);
       }
       setLoading(false);
@@ -110,6 +176,7 @@ export function AuthProvider({ children }) {
   // Demo Login Helper
   const loginAsDemo = (userRole = "pegawai", name = "Pegawai BSI", nip = "123456789") => {
     setIsDemoMode(true);
+    sessionStorage.setItem("bsi_demo_mode", "true");
     const demoProf = {
       id: "demo-user-id",
       full_name: name,
@@ -118,9 +185,12 @@ export function AuthProvider({ children }) {
       employee_id: nip,
       role: userRole,
     };
-    setUser({ id: "demo-user-id", email: demoProf.email });
+    const demoUser = { id: "demo-user-id", email: demoProf.email };
+    setUser(demoUser);
     setProfile(demoProf);
     setRole(userRole);
+    sessionStorage.setItem("bsi_demo_user", JSON.stringify(demoUser));
+    sessionStorage.setItem("bsi_demo_profile", JSON.stringify(demoProf));
     return demoProf;
   };
 
@@ -148,30 +218,32 @@ export function AuthProvider({ children }) {
 
       if (error) throw error;
 
-      // Direct insert profile into profiles table (or users table)
+      // Direct insert profile into profiles table
       if (data.user) {
         const profileData = {
           id: data.user.id,
           full_name,
           email,
-          nip: nipVal,
-          employee_id: nipVal,
-          password: password,
+          NIP: nipVal,
           role: "pegawai",
+          password: password,
         };
 
-        try {
-          // Try profiles table first
-          const { error: profileErr } = await supabase
-            .from("profiles")
-            .insert([profileData]);
+        const { error: profileErr } = await supabase
+          .from("profiles")
+          .insert([profileData]);
 
-          if (profileErr) {
-            // Try users table if profiles table fails
-            await supabase.from("users").insert([profileData]);
-          }
-        } catch (e) {
-          console.warn("Autocreate profile table insert skipped:", e);
+        if (profileErr) {
+          console.warn("Retrying profile insert with lowercase nip:", profileErr.message);
+          const fallbackProfileData = {
+            id: data.user.id,
+            full_name,
+            email,
+            nip: nipVal,
+            role: "pegawai",
+            password: password,
+          };
+          await supabase.from("profiles").insert([fallbackProfileData]);
         }
       }
 
@@ -203,25 +275,29 @@ export function AuthProvider({ children }) {
       if (!targetEmail.includes("@")) {
         let foundEmail = null;
 
-        // Cari berdasarkan nip atau employee_id di tabel profiles
-        const { data: profileByNip } = await supabase
-          .from("profiles")
-          .select("email")
-          .or(`nip.eq.${targetEmail},employee_id.eq.${targetEmail}`)
-          .maybeSingle();
-
-        if (profileByNip?.email) {
-          foundEmail = profileByNip.email;
-        } else {
-          // Coba di tabel users
-          const { data: userByNip } = await supabase
-            .from("users")
+        // 1. Cari di tabel profiles berdasarkan NIP (kapital)
+        try {
+          const { data: pData } = await supabase
+            .from("profiles")
             .select("email")
-            .or(`nip.eq.${targetEmail},employee_id.eq.${targetEmail}`)
+            .eq("NIP", targetEmail)
             .maybeSingle();
+          if (pData?.email) foundEmail = pData.email;
+        } catch (e) {
+          console.warn("NIP lookup error:", e);
+        }
 
-          if (userByNip?.email) {
-            foundEmail = userByNip.email;
+        // 2. Fallback cari berdasarkan nip (kecil)
+        if (!foundEmail) {
+          try {
+            const { data: pDataLower } = await supabase
+              .from("profiles")
+              .select("email")
+              .eq("nip", targetEmail)
+              .maybeSingle();
+            if (pDataLower?.email) foundEmail = pDataLower.email;
+          } catch (e) {
+            console.warn("nip lookup error:", e);
           }
         }
 
@@ -305,6 +381,9 @@ export function AuthProvider({ children }) {
 
   // Sign Out
   const signOut = async () => {
+    sessionStorage.removeItem("bsi_demo_mode");
+    sessionStorage.removeItem("bsi_demo_user");
+    sessionStorage.removeItem("bsi_demo_profile");
     if (isSupabaseConfigured && !isDemoMode) {
       try {
         await supabase.auth.signOut();
@@ -331,6 +410,8 @@ export function AuthProvider({ children }) {
         signOut,
         loginAsDemo,
         isDemoMode,
+        idleExpired,
+        clearIdleNotice: () => setIdleExpired(false),
         isConfigured: isSupabaseConfigured,
       }}
     >

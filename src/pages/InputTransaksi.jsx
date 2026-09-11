@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FileEdit,
   RotateCcw,
@@ -11,118 +11,189 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Search
+  Search,
+  Loader2
 } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmationModal from "../components/ConfirmationModal";
 import EditTransactionModal from "../components/EditTransactionModal";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+import { useRole } from "../context/RoleContext";
+
+// Helper functions for date formatting
+function formatDateForDisplay(dateStr) {
+  if (!dateStr) return "";
+  if (dateStr.includes("-")) {
+    const parts = dateStr.split("T")[0].split("-");
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+    }
+  }
+  return dateStr;
+}
+
+function formatDateForDB(dateStr) {
+  if (!dateStr) return new Date().toISOString().split("T")[0];
+  if (dateStr.includes("/")) {
+    const parts = dateStr.split("/");
+    if (parts.length === 3) {
+      const [d, m, y] = parts;
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+  }
+  return dateStr;
+}
+
+function getTodayFormatted() {
+  const now = new Date();
+  const d = String(now.getDate()).padStart(2, "0");
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const y = now.getFullYear();
+  return `${d}/${m}/${y}`;
+}
 
 export default function InputTransaksi() {
-  // Today's date default
-  const [tanggal, setTanggal] = useState("03/09/2026");
-  const [produk, setProduk] = useState("RB");
-  const [noa, setNoa] = useState(2);
-  const [nominal, setNominal] = useState("20000000");
-  const [gram, setGram] = useState("");
-  const [keterangan, setKeterangan] = useState("Pembukaan rekening baru");
+  const { user, profile } = useAuth();
+  const { role } = useRole();
 
-  // Notifications & Modals state
+  const isKabag = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag";
+  const currentUserId = user?.id || profile?.id;
+
+  // Form State
+  const [tanggal, setTanggal] = useState(getTodayFormatted());
+  const [produk, setProduk] = useState("RB");
+  const [noa, setNoa] = useState(1);
+  const [nominal, setNominal] = useState("");
+  const [gram, setGram] = useState("");
+  const [keterangan, setKeterangan] = useState("");
+
+  // Loading & Submitting State
+  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Notifications & Modals State
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState(null);
 
-  // Filters & Pagination
+  // Filters & Pagination State
   const [searchTerm, setSearchTerm] = useState("");
   const [filterProduk, setFilterProduk] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
-  // Master product dictionary
+  // Master Product Dictionary (mapped to database product_id 1..7)
   const daftarProduk = [
-    { code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
-    { code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
-    { code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
-    { code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
-    { code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
-    { code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
-    { code: "CILEM", name: "CILEM", unit: "gram" }
+    { id: 1, code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
+    { id: 2, code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
+    { id: 3, code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
+    { id: 4, code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
+    { id: 5, code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
+    { id: 6, code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
+    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" }
   ];
 
-  // Sample transactions dataset matching user prompt and screenshot
-  const [riwayat, setRiwayat] = useState([
-    {
-      id: 1,
-      tanggal: "03/09/2026",
-      produk: "RB - Rekening BSI",
-      produkCode: "RB",
-      noa: 2,
-      nominal: "20.000.000",
-      nominalRaw: "20000000",
-      gram: "-",
-      gramRaw: "",
-      keterangan: "Pembukaan rekening baru",
-      status: "Tersimpan"
-    },
-    {
-      id: 2,
-      tanggal: "01/09/2026",
-      produk: "MAXI - Tabungan Maxi",
-      produkCode: "MAXI",
-      noa: 1,
-      nominal: "10.000.000",
-      nominalRaw: "10000000",
-      gram: "-",
-      gramRaw: "",
-      keterangan: "Setoran awal",
-      status: "Tersimpan"
-    },
-    {
-      id: 3,
-      tanggal: "31/08/2026",
-      produk: "Tab Emas",
-      produkCode: "TAB EMAS",
-      noa: 2,
-      nominal: "-",
-      nominalRaw: "",
-      gram: "5,00",
-      gramRaw: "5.00",
-      keterangan: "Pembelian tab emas",
-      status: "Tersimpan"
-    },
-    {
-      id: 4,
-      tanggal: "30/08/2026",
-      produk: "Pembiayaan",
-      produkCode: "PEMBIAYAAN",
-      noa: 1,
-      nominal: "15.000.000",
-      nominalRaw: "15000000",
-      gram: "-",
-      gramRaw: "",
-      keterangan: "Pembiayaan multiguna",
-      status: "Tersimpan"
-    },
-    {
-      id: 5,
-      tanggal: "29/08/2026",
-      produk: "CILEM",
-      produkCode: "CILEM",
-      noa: 1,
-      nominal: "-",
-      nominalRaw: "",
-      gram: "2,00",
-      gramRaw: "2.00",
-      keterangan: "CICIL EMAS",
-      status: "Tersimpan"
+  // Transactions list state
+  const [riwayat, setRiwayat] = useState([]);
+
+  // Fetch transactions from Supabase
+  const fetchTransactions = async () => {
+    if (!isSupabaseConfigured) return;
+    setLoading(true);
+    try {
+      let query = supabase
+        .from("transactions")
+        .select("*, products(id, name, measurement_type)")
+        .order("created_at", { ascending: false });
+
+      if (currentUserId && currentUserId !== "demo-user-id") {
+        query = query.eq("user_id", currentUserId);
+      } else {
+        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("Error fetching transactions from Supabase:", error);
+      } else if (data) {
+        const formatted = data.map((item) => {
+          const prodInfo = item.products || {};
+          const prodCode = prodInfo.name || "RB";
+          const matchMaster = daftarProduk.find(
+            (p) => p.code.toUpperCase() === prodCode.toUpperCase() || p.id === item.product_id
+          );
+
+          return {
+            id: item.id,
+            user_id: item.user_id,
+            product_id: item.product_id,
+            tanggal: formatDateForDisplay(item.transaction_date),
+            rawDate: item.transaction_date,
+            produk: matchMaster?.name || prodCode,
+            produkCode: matchMaster?.code || prodCode,
+            noa: item.noa || 0,
+            nominal: item.nominal !== null && item.nominal !== undefined ? Number(item.nominal).toLocaleString("id-ID") : "-",
+            nominalRaw: item.nominal !== null && item.nominal !== undefined ? item.nominal.toString() : "",
+            gram: item.gram !== null && item.gram !== undefined ? Number(item.gram).toFixed(2).replace(".", ",") : "-",
+            gramRaw: item.gram !== null && item.gram !== undefined ? item.gram.toString() : "",
+            keterangan: matchMaster?.name || prodCode,
+            status: "Tersimpan"
+          };
+        });
+        setRiwayat(formatted);
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      fetchTransactions();
+    } else {
+      setRiwayat([
+        {
+          id: 1,
+          tanggal: "03/09/2026",
+          produk: "RB - Rekening BSI",
+          produkCode: "RB",
+          noa: 2,
+          nominal: "20.000.000",
+          nominalRaw: "20000000",
+          gram: "-",
+          gramRaw: "",
+          keterangan: "Pembukaan rekening baru",
+          status: "Tersimpan"
+        },
+        {
+          id: 2,
+          tanggal: "01/09/2026",
+          produk: "MAXI - Tabungan Maxi",
+          produkCode: "MAXI",
+          noa: 1,
+          nominal: "10.000.000",
+          nominalRaw: "10000000",
+          gram: "-",
+          gramRaw: "",
+          keterangan: "Setoran awal",
+          status: "Tersimpan"
+        }
+      ]);
+    }
+  }, [user, profile, role]);
 
   const selectedProductObj = daftarProduk.find((p) => p.code === produk);
 
   // Form Reset
   const handleReset = () => {
-    setTanggal("03/09/2026");
+    setTanggal(getTodayFormatted());
     setProduk("RB");
     setNoa(1);
     setNominal("");
@@ -130,66 +201,171 @@ export default function InputTransaksi() {
     setKeterangan("");
   };
 
-  // Form Submit
-  const handleSubmit = (e) => {
+  // Form Submit to Supabase
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!tanggal || !produk || !noa || noa <= 0) return;
 
     const prodInfo = daftarProduk.find((p) => p.code === produk);
-    const formattedNominal =
-      prodInfo?.unit === "nominal" && nominal
-        ? Number(nominal).toLocaleString("id-ID")
-        : "-";
-    const formattedGram =
-      prodInfo?.unit === "gram" && gram
-        ? Number(gram).toFixed(2).replace(".", ",")
-        : "-";
+    const productId = prodInfo?.id || 1;
+    const isGramUnit = prodInfo?.unit === "gram";
 
-    const newTransaction = {
-      id: Date.now(),
-      tanggal,
-      produk: prodInfo?.name || produk,
-      produkCode: produk,
-      noa: Number(noa),
-      nominal: formattedNominal,
-      nominalRaw: nominal,
-      gram: formattedGram,
-      gramRaw: gram,
-      keterangan: keterangan || "-",
-      status: "Tersimpan"
-    };
+    const dbDate = formatDateForDB(tanggal);
+    const numNominal = !isGramUnit && nominal ? parseFloat(nominal) : null;
+    const numGram = isGramUnit && gram ? parseFloat(gram) : null;
 
-    setRiwayat([newTransaction, ...riwayat]);
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 4000);
+    // Helper to validate UUID format
+    const isValidUUID = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    // Reset Form to Default
-    setNominal("");
-    setGram("");
-    setKeterangan("");
-  };
+    // Resolve valid user_id to satisfy FK constraint (transactions_user_id_fkey)
+    let validUserId = user?.id;
+    if (!isValidUUID(validUserId)) {
+      validUserId = profile?.id;
+    }
+    if (!isValidUUID(validUserId)) {
+      validUserId = "0c8cf587-370b-4ccb-969e-244685919156"; // Fallback to valid profile UUID in Supabase
+    }
 
-  // Delete Action
-  const handleDeleteConfirm = () => {
-    if (itemToDelete) {
-      setRiwayat(riwayat.filter((item) => item.id !== itemToDelete.id));
-      setItemToDelete(null);
+    if (isSupabaseConfigured) {
+      setIsSubmitting(true);
+      try {
+        const payload = {
+          user_id: validUserId,
+          product_id: productId,
+          transaction_date: dbDate,
+          noa: Number(noa),
+          nominal: numNominal,
+          gram: numGram,
+        };
+
+        const { data, error } = await supabase
+          .from("transactions")
+          .insert([payload])
+          .select("*, products(id, name, measurement_type)");
+
+        if (error) {
+          console.error("Error inserting transaction into Supabase:", error);
+          alert(`Gagal menyimpan transaksi: ${error.message}`);
+        } else {
+          await fetchTransactions();
+          setShowSuccessToast(true);
+          setTimeout(() => setShowSuccessToast(false), 4000);
+          handleReset();
+        }
+      } catch (err) {
+        console.error("Submit error:", err);
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      const formattedNominal = !isGramUnit && nominal ? Number(nominal).toLocaleString("id-ID") : "-";
+      const formattedGram = isGramUnit && gram ? Number(gram).toFixed(2).replace(".", ",") : "-";
+
+      const newTransaction = {
+        id: Date.now(),
+        tanggal,
+        produk: prodInfo?.name || produk,
+        produkCode: produk,
+        noa: Number(noa),
+        nominal: formattedNominal,
+        nominalRaw: nominal,
+        gram: formattedGram,
+        gramRaw: gram,
+        keterangan: keterangan || "-",
+        status: "Tersimpan"
+      };
+
+      setRiwayat([newTransaction, ...riwayat]);
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 4000);
+      handleReset();
     }
   };
 
-  // Edit Save Action
-  const handleEditSave = (updatedItem) => {
-    setRiwayat(riwayat.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+  // Delete Action in Supabase
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+
+    if (isSupabaseConfigured && itemToDelete.id) {
+      try {
+        const { error } = await supabase
+          .from("transactions")
+          .delete()
+          .eq("id", itemToDelete.id);
+
+        if (error) {
+          console.error("Error deleting transaction:", error);
+          alert(`Gagal menghapus transaksi: ${error.message}`);
+        } else {
+          await fetchTransactions();
+        }
+      } catch (err) {
+        console.error("Delete error:", err);
+      }
+    } else {
+      setRiwayat(riwayat.filter((item) => item.id !== itemToDelete.id));
+    }
+    setItemToDelete(null);
+    setDeleteModalOpen(false);
+  };
+
+  // Edit Save Action in Supabase
+  const handleEditSave = async (updatedItem) => {
+    if (isSupabaseConfigured && updatedItem.id) {
+      try {
+        const selectedProd = daftarProduk.find(
+          (p) => p.code === updatedItem.produkCode || p.id === Number(updatedItem.product_id)
+        );
+        const productId = selectedProd?.id || updatedItem.product_id || 1;
+        const isGramUnit = selectedProd?.unit === "gram";
+
+        const dbDate = formatDateForDB(updatedItem.tanggal);
+        const numNominal = !isGramUnit && updatedItem.nominalRaw ? parseFloat(updatedItem.nominalRaw) : null;
+        const numGram = isGramUnit && updatedItem.gramRaw ? parseFloat(updatedItem.gramRaw) : null;
+
+        const { error } = await supabase
+          .from("transactions")
+          .update({
+            product_id: productId,
+            transaction_date: dbDate,
+            noa: Number(updatedItem.noa),
+            nominal: numNominal,
+            gram: numGram,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", updatedItem.id);
+
+        if (error) {
+          console.error("Error updating transaction:", error);
+          alert(`Gagal memperbarui transaksi: ${error.message}`);
+        } else {
+          await fetchTransactions();
+        }
+      } catch (err) {
+        console.error("Edit error:", err);
+      }
+    } else {
+      setRiwayat(riwayat.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+    }
+    setEditModalOpen(false);
+    setItemToEdit(null);
   };
 
   // Filtered dataset
   const filteredRiwayat = riwayat.filter((item) => {
     const matchSearch =
-      item.keterangan.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.produk.toLowerCase().includes(searchTerm.toLowerCase());
+      (item.keterangan || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.produk || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchProduct = filterProduk === "ALL" || item.produkCode === filterProduk;
     return matchSearch && matchProduct;
   });
+
+  // Pagination calculation
+  const totalPages = Math.ceil(filteredRiwayat.length / itemsPerPage) || 1;
+  const paginatedRiwayat = filteredRiwayat.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
     <div className="space-y-6">
@@ -273,10 +449,14 @@ export default function InputTransaksi() {
                 NOA (Jumlah) <span className="text-rose-500">*</span>
               </label>
               <input
-                type="number"
-                min="1"
+                type="text"
+                inputMode="numeric"
                 value={noa}
-                onChange={(e) => setNoa(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^0-9]/g, "");
+                  setNoa(val);
+                }}
+                placeholder="1"
                 className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
                 required
               />
@@ -321,39 +501,16 @@ export default function InputTransaksi() {
               />
             </div>
 
-            {/* 6. Keterangan */}
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
-                Keterangan (Opsional)
-              </label>
-              <textarea
-                rows="1"
-                value={keterangan}
-                onChange={(e) => setKeterangan(e.target.value)}
-                placeholder="Pembukaan rekening baru"
-                className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
-              />
-            </div>
           </div>
 
-          {/* Informational Alert */}
-          <div className="bg-[#e6f5f5] border border-[#00a0a0]/20 p-4 rounded-xl text-xs text-slate-700 flex items-start space-x-3">
-            <Info className="w-4 h-4 text-[#00a0a0] shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <span className="font-bold text-[#00a0a0]">Catatan:</span>
-              <ul className="list-disc list-inside text-[#008888] space-y-0.5 font-medium">
-                <li>Isi Nominal untuk produk dengan satuan Rupiah (RB, MAXI, ABATANA, TAB HAJI, PEMBIAYAAN)</li>
-                <li>Isi Gram untuk produk dengan satuan Gram (TAB EMAS, CILEM)</li>
-              </ul>
-            </div>
-          </div>
 
           {/* Form Action Buttons */}
           <div className="flex items-center justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={handleReset}
-              className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
+              disabled={isSubmitting}
+              className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
               <span>Reset</span>
@@ -361,10 +518,20 @@ export default function InputTransaksi() {
 
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-[#00a0a0] hover:bg-[#008888] text-white text-xs font-bold shadow-xs flex items-center space-x-2 transition-colors cursor-pointer"
+              disabled={isSubmitting}
+              className="px-5 py-2.5 rounded-xl bg-[#00a0a0] hover:bg-[#008888] text-white text-xs font-bold shadow-xs flex items-center space-x-2 transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>Simpan Transaksi</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Transaksi</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -378,22 +545,25 @@ export default function InputTransaksi() {
             <h3 className="text-base font-bold text-slate-800 uppercase tracking-tight">
               RIWAYAT TRANSAKSI SAYA
             </h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Daftar transaksi yang telah Anda input pada periode September 2026
-            </p>
           </div>
 
           {/* Filters & Actions */}
           <div className="flex items-center space-x-3 self-start md:self-auto">
-            <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700">
-              <span>Periode: September 2026</span>
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            </div>
-
-            <button className="flex items-center space-x-1 px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer">
-              <Filter className="w-3.5 h-3.5" />
-              <span>Filter</span>
-            </button>
+            <select
+              value={filterProduk}
+              onChange={(e) => {
+                setFilterProduk(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold focus:outline-hidden"
+            >
+              <option value="ALL">Semua Produk</option>
+              {daftarProduk.map((p) => (
+                <option key={p.code} value={p.code}>
+                  {p.code}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -404,7 +574,10 @@ export default function InputTransaksi() {
               type="text"
               placeholder="Cari transaksi..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#009688] outline-hidden"
             />
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -416,7 +589,16 @@ export default function InputTransaksi() {
         </div>
 
         {/* Data Table */}
-        <div className="overflow-x-auto custom-scrollbar border border-slate-100 rounded-xl">
+        <div className="overflow-x-auto custom-scrollbar border border-slate-100 rounded-xl relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/70 backdrop-blur-xs flex items-center justify-center z-10">
+              <div className="flex items-center space-x-2 text-xs font-bold text-[#00a0a0]">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Memuat data transaksi...</span>
+              </div>
+            </div>
+          )}
+
           <table className="w-full text-xs text-center border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
@@ -426,22 +608,22 @@ export default function InputTransaksi() {
                 <th className="py-3 px-3 min-w-[50px]">NOA</th>
                 <th className="py-3 px-3 text-right min-w-[110px]">Nominal (Rp)</th>
                 <th className="py-3 px-3 text-right min-w-[80px]">Gram</th>
-                <th className="py-3 px-3 text-left min-w-[180px]">Keterangan</th>
                 <th className="py-3 px-3 min-w-[110px]">Status</th>
                 <th className="py-3 px-3 min-w-[80px]">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {filteredRiwayat.length > 0 ? (
-                filteredRiwayat.map((row, idx) => (
+              {paginatedRiwayat.length > 0 ? (
+                paginatedRiwayat.map((row, idx) => (
                   <tr key={row.id} className="hover:bg-slate-50/80 font-medium transition-colors">
-                    <td className="py-3 px-3 font-semibold text-slate-500">{idx + 1}</td>
+                    <td className="py-3 px-3 font-semibold text-slate-500">
+                      {(currentPage - 1) * itemsPerPage + idx + 1}
+                    </td>
                     <td className="py-3 px-3">{row.tanggal}</td>
                     <td className="py-3 px-3 text-left font-bold text-slate-800">{row.produk}</td>
                     <td className="py-3 px-3 font-bold">{row.noa}</td>
                     <td className="py-3 px-3 text-right font-semibold">{row.nominal}</td>
                     <td className="py-3 px-3 text-right font-bold text-amber-600">{row.gram}</td>
-                    <td className="py-3 px-3 text-left text-slate-600">{row.keterangan}</td>
                     <td className="py-3 px-3">
                       <StatusBadge status={row.status} />
                     </td>
@@ -473,7 +655,7 @@ export default function InputTransaksi() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="py-8 text-center text-slate-400 font-medium">
+                  <td colSpan="8" className="py-8 text-center text-slate-400 font-medium">
                     Tidak ada data transaksi yang ditemukan.
                   </td>
                 </tr>
@@ -485,23 +667,38 @@ export default function InputTransaksi() {
         {/* Footer & Pagination */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-slate-500 pt-2 gap-3">
           <div>
-            Menampilkan 1 - {filteredRiwayat.length} dari 15 transaksi
+            Menampilkan {filteredRiwayat.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} -{" "}
+            {Math.min(currentPage * itemsPerPage, filteredRiwayat.length)} dari {filteredRiwayat.length} transaksi
           </div>
 
           <div className="flex items-center space-x-1">
-            <button className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 cursor-pointer">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button className="px-3 py-1.5 rounded-lg bg-[#009688] text-white font-bold cursor-pointer">
-              1
-            </button>
-            <button className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 font-medium cursor-pointer">
-              2
-            </button>
-            <button className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 font-medium cursor-pointer">
-              3
-            </button>
-            <button className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                  currentPage === pageNum
+                    ? "bg-[#009688] text-white font-bold"
+                    : "border border-slate-200 hover:bg-slate-50 font-medium"
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
