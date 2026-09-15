@@ -199,8 +199,8 @@ export default function RiwayatTransaksi() {
           <History className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-slate-800 tracking-tight">RIWAYAT TRANSAKSI SAYA</h2>
-          <p className="text-xs text-slate-500 font-medium">Daftar seluruh riwayat transaksi yang Anda inputkan</p>
+          <h2 className="text-lg font-bold text-slate-800 tracking-tight">RIWAYAT INPUTAN SAYA</h2>
+          <p className="text-xs text-slate-500 font-medium">Daftar seluruh riwayat inputan yang Anda lakukan</p>
         </div>
       </div>
 

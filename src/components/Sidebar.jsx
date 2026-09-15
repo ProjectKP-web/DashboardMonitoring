@@ -31,7 +31,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       group: "TRANSAKSI",
       items: [
         { label: "Input Transaksi", path: "/input-transaksi", icon: FileEdit },
-        { label: "Riwayat Transaksi", path: "/riwayat-transaksi", icon: History }
+        { label: "Riwayat Inputan", path: "/riwayat-transaksi", icon: History }
       ]
     },
     {
@@ -102,8 +102,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        {/* Logo Section (Mobile Only) */}
-        <div className="h-16 border-b border-slate-100 px-4 flex items-center justify-between lg:hidden">
+        {/* Logo Section */}
+        <div className="h-16 border-b border-slate-100 px-4 flex items-center justify-between shrink-0">
           <div className="flex items-center">
             <img
               src={bsiLogo}

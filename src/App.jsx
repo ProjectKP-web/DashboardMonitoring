@@ -120,7 +120,7 @@ function App() {
             >
               {/* Pegawai Routes */}
               <Route path="/dashboard-saya" element={<PegawaiRoute><DashboardSaya /></PegawaiRoute>} />
-              <Route path="/input-transaksi" element={<PegawaiRoute><InputTransaksi /></PegawaiRoute>} />
+              <Route path="/input-transaksi" element={<InputTransaksi />} />
               <Route path="/riwayat-transaksi" element={<PegawaiRoute><RiwayatTransaksi /></PegawaiRoute>} />
               <Route path="/rekap-bulanan-saya" element={<PegawaiRoute><RekapBulananSaya /></PegawaiRoute>} />
               <Route path="/profil-saya" element={<ProfilSaya />} />

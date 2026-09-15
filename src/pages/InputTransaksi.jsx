@@ -387,10 +387,10 @@ export default function InputTransaksi() {
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-800 uppercase tracking-tight">
-                FORM INPUT TRANSAKSI
+                FORM INPUTAN
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Masukkan data transaksi program yang Anda lakukan
+                Masukkan data inputan yang Anda lakukan
               </p>
             </div>
           </div>
@@ -543,7 +543,7 @@ export default function InputTransaksi() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-100 pb-4 gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-800 uppercase tracking-tight">
-              RIWAYAT TRANSAKSI SAYA
+              RIWAYAT INPUTAN SAYA
             </h3>
           </div>
 
