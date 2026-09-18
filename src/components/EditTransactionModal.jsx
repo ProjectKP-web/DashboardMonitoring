@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { X, Save, Calendar, Hash, Banknote, Scale, Package } from "lucide-react";
 
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
+
 export default function EditTransactionModal({ isOpen, onClose, onSave, transaction }) {
   const [tanggal, setTanggal] = useState("");
   const [produk, setProduk] = useState("RB");
@@ -9,19 +11,49 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
   const [gram, setGram] = useState("");
   const [keterangan, setKeterangan] = useState("");
 
-  const daftarProduk = [
+  const defaultDaftarProduk = [
     { id: 1, code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
     { id: 2, code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
     { id: 3, code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
     { id: 4, code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
     { id: 5, code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
     { id: 6, code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
-    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" }
+    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" },
+    { id: 8, code: "QRIS", name: "QRIS - Merchant QRIS BSI", unit: "noa" }
   ];
+
+  const [daftarProduk, setDaftarProduk] = useState(defaultDaftarProduk);
+
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      supabase.from("products").select("*").order("id", { ascending: true }).then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          const formatted = data.map((p) => ({
+            id: p.id,
+            code: p.name,
+            name: p.name === "QRIS" ? "QRIS - Merchant QRIS BSI" : p.name,
+            unit: p.measurement_type || "nominal"
+          }));
+          setDaftarProduk(formatted);
+        }
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (transaction) {
-      setTanggal(transaction.tanggal || "");
+      let isoDate = transaction.rawDate;
+      if (!isoDate && transaction.tanggal) {
+        if (transaction.tanggal.includes("/")) {
+          const parts = transaction.tanggal.split("/");
+          if (parts.length === 3) {
+            isoDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          }
+        } else {
+          isoDate = transaction.tanggal;
+        }
+      }
+      setTanggal(isoDate || new Date().toISOString().split("T")[0]);
       setProduk(transaction.produkCode || transaction.produk || "RB");
       setNoa(transaction.noa || 1);
       setNominal(transaction.nominalRaw !== undefined && transaction.nominalRaw !== null ? transaction.nominalRaw : "");
@@ -68,10 +100,11 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tanggal Transaksi</label>
               <input
-                type="text"
+                type="date"
                 value={tanggal}
+                onClick={(e) => e.target.showPicker && e.target.showPicker()}
                 onChange={(e) => setTanggal(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-[#009688] outline-hidden"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-[#009688] outline-hidden cursor-pointer"
               />
             </div>
 

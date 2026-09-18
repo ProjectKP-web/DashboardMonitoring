@@ -24,26 +24,26 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
     {
       group: "DASHBOARD",
       items: [
-        { label: "Dashboard Saya", path: "/dashboard-saya", icon: LayoutDashboard }
+        { label: "Dashboard", path: "/dashboard-saya", icon: LayoutDashboard }
       ]
     },
     {
-      group: "TRANSAKSI",
+      group: "PRODUK",
       items: [
-        { label: "Input Transaksi", path: "/input-transaksi", icon: FileEdit },
-        { label: "Riwayat Inputan", path: "/riwayat-transaksi", icon: History }
+        { label: "Input Produk", path: "/input-transaksi", icon: FileEdit },
+        { label: "Riwayat Produk", path: "/riwayat-transaksi", icon: History }
       ]
     },
-    {
+    {  
       group: "LAPORAN",
       items: [
-        { label: "Rekap Bulanan Saya", path: "/rekap-bulanan-saya", icon: CalendarCheck }
+        { label: "Rekap Bulanan", path: "/rekap-bulanan-saya", icon: CalendarCheck }
       ]
     },
     {
       group: "PENGATURAN",
       items: [
-        { label: "Profil Saya", path: "/profil-saya", icon: User }
+        { label: "Profil", path: "/profil-saya", icon: User }
       ]
     }
   ];
@@ -64,9 +64,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       ]
     },
     {
-      group: "TRANSAKSI",
+      group: "PRODUK",
       items: [
-        { label: "Input Transaksi", path: "/input-transaksi", icon: FileEdit }
+        { label: "Input Produk", path: "/input-transaksi", icon: FileEdit }
       ]
     },
     {

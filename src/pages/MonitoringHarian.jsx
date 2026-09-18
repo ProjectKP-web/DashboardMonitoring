@@ -25,16 +25,16 @@ export default function MonitoringHarian() {
     if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
-      // Get all profiles for mapping user_id -> profile name
-      const { data: profilesData } = await supabase.from("profiles").select("*");
-      const profileMap = {};
-      (profilesData || []).forEach((p) => {
-        profileMap[p.id] = (p.full_name || p.email || "Pegawai").toUpperCase();
+      // Get all pegawai for mapping pegawai_id -> pegawai name
+      const { data: pegawaiData } = await supabase.from("pegawai").select("*");
+      const pegawaiMap = {};
+      (pegawaiData || []).forEach((p) => {
+        pegawaiMap[p.id] = (p.nama || "PEGAWAI").toUpperCase();
       });
 
       let query = supabase
         .from("transactions")
-        .select("*, products(id, name, measurement_type)")
+        .select("*, products(id, name, measurement_type), pegawai(id, nama)")
         .eq("transaction_date", selectedDate)
         .order("created_at", { ascending: false });
 
@@ -56,7 +56,7 @@ export default function MonitoringHarian() {
 
         const formatted = data.map((item) => {
           const jam = item.created_at ? new Date(item.created_at).toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' }) : "12:00";
-          const empName = profileMap[item.user_id] || (item.user_id === currentUserId ? (profile?.full_name || "PEGAWAI BSI").toUpperCase() : "PEGAWAI BSI");
+          const empName = item.pegawai?.nama ? item.pegawai.nama.toUpperCase() : (pegawaiMap[item.pegawai_id] || "PEGAWAI BSI");
           const prodCode = item.products?.name || "RB";
 
           const nominalVal = item.nominal !== null && item.nominal !== undefined ? Number(item.nominal) : 0;
@@ -115,8 +115,9 @@ export default function MonitoringHarian() {
             <input
               type="date"
               value={selectedDate}
+              onClick={(e) => e.target.showPicker && e.target.showPicker()}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-white border border-slate-300 rounded-xl text-sm px-3 py-2 font-medium text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#009688]"
+              className="bg-white border border-slate-300 rounded-xl text-sm px-3 py-2 font-medium text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#009688] cursor-pointer"
             />
           </div>
           <button

@@ -46,12 +46,12 @@ function formatDateForDB(dateStr) {
   return dateStr;
 }
 
-function getTodayFormatted() {
+function getTodayISO() {
   const now = new Date();
   const d = String(now.getDate()).padStart(2, "0");
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const y = now.getFullYear();
-  return `${d}/${m}/${y}`;
+  return `${y}-${m}-${d}`;
 }
 
 export default function InputTransaksi() {
@@ -62,7 +62,7 @@ export default function InputTransaksi() {
   const currentUserId = user?.id || profile?.id;
 
   // Form State
-  const [tanggal, setTanggal] = useState(getTodayFormatted());
+  const [tanggal, setTanggal] = useState(getTodayISO());
   const [produk, setProduk] = useState("RB");
   const [noa, setNoa] = useState(1);
   const [nominal, setNominal] = useState("");
@@ -86,16 +86,70 @@ export default function InputTransaksi() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  // Master Product Dictionary (mapped to database product_id 1..7)
-  const daftarProduk = [
+  // Default Master Product Dictionary including QRIS
+  const defaultDaftarProduk = [
     { id: 1, code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
     { id: 2, code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
     { id: 3, code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
     { id: 4, code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
     { id: 5, code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
     { id: 6, code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
-    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" }
+    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" },
+    { id: 8, code: "QRIS", name: "QRIS - Merchant QRIS BSI", unit: "noa" }
   ];
+
+  const [daftarProduk, setDaftarProduk] = useState(defaultDaftarProduk);
+
+  // Default Master Employee List for Dropdown
+  const defaultPegawai = [
+    { id: 1, nama: "VANNY" },
+    { id: 2, nama: "BETHARI" },
+    { id: 3, nama: "ZHARIF" },
+    { id: 4, nama: "RIZKY" },
+    { id: 5, nama: "LILI" },
+    { id: 6, nama: "NISA" },
+    { id: 7, nama: "ARDI" },
+    { id: 8, nama: "OKTA" },
+    { id: 9, nama: "HENDRA" },
+    { id: 10, nama: "RICO" },
+    { id: 11, nama: "RIAN" },
+    { id: 12, nama: "SYAIFUL" },
+    { id: 13, nama: "RAHMAD" },
+    { id: 14, nama: "SUHADI" }
+  ];
+
+  const [daftarPegawai, setDaftarPegawai] = useState(defaultPegawai);
+  const [selectedPegawaiId, setSelectedPegawaiId] = useState("");
+
+  const fetchPegawaiFromDB = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase.from("pegawai").select("*").order("nama", { ascending: true });
+      if (!error && data && data.length > 0) {
+        setDaftarPegawai(data);
+      }
+    } catch (e) {
+      console.error("Error fetching pegawai in InputTransaksi:", e);
+    }
+  };
+
+  const fetchProductsFromDB = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase.from("products").select("*").order("id", { ascending: true });
+      if (!error && data && data.length > 0) {
+        const formatted = data.map((p) => ({
+          id: p.id,
+          code: p.name,
+          name: p.name === "QRIS" ? "QRIS - Merchant QRIS BSI" : p.name,
+          unit: p.measurement_type || "nominal"
+        }));
+        setDaftarProduk(formatted);
+      }
+    } catch (e) {
+      console.error("Error fetching products in InputTransaksi:", e);
+    }
+  };
 
   // Transactions list state
   const [riwayat, setRiwayat] = useState([]);
@@ -107,7 +161,7 @@ export default function InputTransaksi() {
     try {
       let query = supabase
         .from("transactions")
-        .select("*, products(id, name, measurement_type)")
+        .select("*, products(id, name, measurement_type), pegawai(id, nama)")
         .order("created_at", { ascending: false });
 
       if (currentUserId && currentUserId !== "demo-user-id") {
@@ -128,10 +182,15 @@ export default function InputTransaksi() {
             (p) => p.code.toUpperCase() === prodCode.toUpperCase() || p.id === item.product_id
           );
 
+          const empObj = item.pegawai || (daftarPegawai || []).find((p) => String(p.id) === String(item.pegawai_id));
+          const pegawaiNama = empObj?.nama ? empObj.nama.toUpperCase() : "-";
+
           return {
             id: item.id,
             user_id: item.user_id,
             product_id: item.product_id,
+            pegawai_id: item.pegawai_id,
+            pegawaiNama,
             tanggal: formatDateForDisplay(item.transaction_date),
             rawDate: item.transaction_date,
             produk: matchMaster?.name || prodCode,
@@ -156,6 +215,8 @@ export default function InputTransaksi() {
 
   useEffect(() => {
     if (isSupabaseConfigured) {
+      fetchPegawaiFromDB();
+      fetchProductsFromDB();
       fetchTransactions();
     } else {
       setRiwayat([
@@ -193,7 +254,8 @@ export default function InputTransaksi() {
 
   // Form Reset
   const handleReset = () => {
-    setTanggal(getTodayFormatted());
+    setSelectedPegawaiId("");
+    setTanggal(getTodayISO());
     setProduk("RB");
     setNoa(1);
     setNominal("");
@@ -204,14 +266,19 @@ export default function InputTransaksi() {
   // Form Submit to Supabase
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!selectedPegawaiId) {
+      alert("Silakan pilih Nama Pegawai terlebih dahulu.");
+      return;
+    }
     if (!tanggal || !produk || !noa || noa <= 0) return;
 
     const prodInfo = daftarProduk.find((p) => p.code === produk);
     const productId = prodInfo?.id || 1;
     const isGramUnit = prodInfo?.unit === "gram";
+    const isNominalUnit = prodInfo?.unit === "nominal";
 
     const dbDate = formatDateForDB(tanggal);
-    const numNominal = !isGramUnit && nominal ? parseFloat(nominal) : null;
+    const numNominal = isNominalUnit && nominal ? parseFloat(nominal) : null;
     const numGram = isGramUnit && gram ? parseFloat(gram) : null;
 
     // Helper to validate UUID format
@@ -232,6 +299,7 @@ export default function InputTransaksi() {
         const payload = {
           user_id: validUserId,
           product_id: productId,
+          pegawai_id: selectedPegawaiId || null,
           transaction_date: dbDate,
           noa: Number(noa),
           nominal: numNominal,
@@ -355,7 +423,8 @@ export default function InputTransaksi() {
   const filteredRiwayat = riwayat.filter((item) => {
     const matchSearch =
       (item.keterangan || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.produk || "").toLowerCase().includes(searchTerm.toLowerCase());
+      (item.produk || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.pegawaiNama || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchProduct = filterProduk === "ALL" || item.produkCode === filterProduk;
     return matchSearch && matchProduct;
   });
@@ -373,7 +442,7 @@ export default function InputTransaksi() {
       {showSuccessToast && (
         <div className="bg-emerald-50 border border-emerald-300 p-4 rounded-xl shadow-xs flex items-center space-x-3 text-emerald-800 text-sm font-semibold animate-in fade-in duration-300">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <span>Transaksi berhasil disimpan ke Riwayat Transaksi Saya.</span>
+          <span>Produk berhasil disimpan ke Riwayat Produk Saya.</span>
         </div>
       )}
 
@@ -390,38 +459,61 @@ export default function InputTransaksi() {
                 FORM INPUTAN
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Masukkan data inputan yang Anda lakukan
+                Masukkan data produk yang Anda lakukan
               </p>
             </div>
           </div>
 
           <div className="text-xs font-semibold text-slate-400 self-start sm:self-center">
-            Dashboard &gt; <span className="text-[#00a0a0]">Input Transaksi</span>
+            Dashboard &gt; <span className="text-[#00a0a0]">Input Produk</span>
           </div>
         </div>
 
         {/* Input Form Grid */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs">
-            {/* 1. Tanggal Transaksi */}
+            {/* 1. Nama Referral / Pegawai */}
             <div>
               <label className="block font-bold text-slate-700 mb-1.5">
-                Tanggal Transaksi <span className="text-rose-500">*</span>
+                Nama Referral (Pegawai) <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={selectedPegawaiId}
+                onChange={(e) => setSelectedPegawaiId(e.target.value)}
+                required
+                className={`w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0] ${
+                  !selectedPegawaiId ? "text-slate-400" : "text-slate-800"
+                }`}
+              >
+                <option value="" disabled hidden>
+                  -- Pilih Nama Pegawai --
+                </option>
+                {daftarPegawai.map((p) => (
+                  <option key={p.id} value={p.id} className="text-slate-800">
+                    {p.nama}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. Tanggal Produk */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Tanggal Produk <span className="text-rose-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <input
-                  type="text"
+                  type="date"
                   value={tanggal}
+                  onClick={(e) => e.target.showPicker && e.target.showPicker()}
                   onChange={(e) => setTanggal(e.target.value)}
-                  placeholder="DD/MM/YYYY"
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0] cursor-pointer"
                   required
                 />
-                <Calendar className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
               </div>
             </div>
 
-            {/* 2. Produk */}
+            {/* 3. Produk */}
             <div>
               <label className="block font-bold text-slate-700 mb-1.5">
                 Produk <span className="text-rose-500">*</span>
@@ -492,7 +584,7 @@ export default function InputTransaksi() {
                 value={gram}
                 onChange={(e) => setGram(e.target.value)}
                 disabled={selectedProductObj?.unit !== "gram"}
-                placeholder={selectedProductObj?.unit === "gram" ? "Masukkan gram (misal 5.00)" : "Masukkan gram (jika ada)"}
+                placeholder={selectedProductObj?.unit === "gram" ? "Masukkan gram (misal 5.00)" : "Tidak memerlukan gram"}
                 className={`w-full px-3.5 py-2.5 border rounded-xl font-bold ${
                   selectedProductObj?.unit === "gram"
                     ? "bg-amber-50/60 border-[#f0b43c] text-amber-900 focus:ring-2 focus:ring-[#f0b43c]"
@@ -500,6 +592,13 @@ export default function InputTransaksi() {
                 }`}
               />
             </div>
+
+            {selectedProductObj?.unit === "noa" && (
+              <div className="md:col-span-3 bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-center space-x-2 text-xs text-purple-700 font-semibold">
+                <Info className="w-4 h-4 text-purple-600 shrink-0" />
+                <span>Produk <strong>{selectedProductObj?.code}</strong> bersifat <em>NOA Only</em> (hanya memerlukan akumulasi NOA/Jumlah Account, tanpa Nominal Rp atau Gram).</span>
+              </div>
+            )}
 
           </div>
 
@@ -572,7 +671,7 @@ export default function InputTransaksi() {
           <div className="relative w-full max-w-xs">
             <input
               type="text"
-              placeholder="Cari transaksi..."
+              placeholder="Cari produk atau pegawai..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -594,7 +693,7 @@ export default function InputTransaksi() {
             <div className="absolute inset-0 bg-white/70 backdrop-blur-xs flex items-center justify-center z-10">
               <div className="flex items-center space-x-2 text-xs font-bold text-[#00a0a0]">
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Memuat data transaksi...</span>
+                <span>Memuat data produk...</span>
               </div>
             </div>
           )}
@@ -604,7 +703,8 @@ export default function InputTransaksi() {
               <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                 <th className="py-3 px-3 min-w-[40px]">No</th>
                 <th className="py-3 px-3 min-w-[90px]">Tanggal</th>
-                <th className="py-3 px-3 text-left min-w-[140px]">Produk</th>
+                <th className="py-3 px-3 text-left min-w-[140px]">Nama Referral</th>
+                <th className="py-3 px-3 text-left min-w-[120px]">Produk</th>
                 <th className="py-3 px-3 min-w-[50px]">NOA</th>
                 <th className="py-3 px-3 text-right min-w-[110px]">Nominal (Rp)</th>
                 <th className="py-3 px-3 text-right min-w-[80px]">Gram</th>
@@ -620,6 +720,7 @@ export default function InputTransaksi() {
                       {(currentPage - 1) * itemsPerPage + idx + 1}
                     </td>
                     <td className="py-3 px-3">{row.tanggal}</td>
+                    <td className="py-3 px-3 text-left font-bold text-slate-900">{row.pegawaiNama || "-"}</td>
                     <td className="py-3 px-3 text-left font-bold text-slate-800">{row.produk}</td>
                     <td className="py-3 px-3 font-bold">{row.noa}</td>
                     <td className="py-3 px-3 text-right font-semibold">{row.nominal}</td>
@@ -655,8 +756,8 @@ export default function InputTransaksi() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="py-8 text-center text-slate-400 font-medium">
-                    Tidak ada data transaksi yang ditemukan.
+                  <td colSpan="9" className="py-8 text-center text-slate-400 font-medium">
+                    Tidak ada data produk yang ditemukan.
                   </td>
                 </tr>
               )}
@@ -668,7 +769,7 @@ export default function InputTransaksi() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-slate-500 pt-2 gap-3">
           <div>
             Menampilkan {filteredRiwayat.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} -{" "}
-            {Math.min(currentPage * itemsPerPage, filteredRiwayat.length)} dari {filteredRiwayat.length} transaksi
+            {Math.min(currentPage * itemsPerPage, filteredRiwayat.length)} dari {filteredRiwayat.length} produk
           </div>
 
           <div className="flex items-center space-x-1">

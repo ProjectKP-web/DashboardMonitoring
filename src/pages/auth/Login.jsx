@@ -29,7 +29,7 @@ export default function Login() {
       const { profile } = await signIn({ identifier, password });
 
       // Check role from profile and redirect automatically to Dashboard
-      const isKabagUser = profile?.role === "kabag" || profile?.role === "kepala_bagian";
+      const isKabagUser = profile?.role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "admin" || profile?.role === "inputer";
       if (isKabagUser) {
         navigate("/dashboard");
       } else {

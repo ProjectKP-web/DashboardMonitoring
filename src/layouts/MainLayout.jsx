@@ -12,13 +12,13 @@ export default function MainLayout() {
     switch (location.pathname) {
       case "/dashboard-saya":
       case "/dashboard":
-        return "Dashboard Saya";
+        return "Dashboard";
       case "/input-transaksi":
-        return "Input Transaksi";
+        return "Input Produk";
       case "/riwayat-transaksi":
-        return "Riwayat Transaksi Saya";
+        return "Riwayat Produk Saya";
       case "/rekap-bulanan-saya":
-        return "Rekap Bulanan Saya";
+        return "Rekap Bulanan";
       case "/rekap-bulanan":
         return "Rekap Monitoring Program (Kabag)";
       case "/pegawai":

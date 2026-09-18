@@ -27,7 +27,7 @@ function KabagRoute({ children }) {
   const { role } = useRole();
 
   const userRole = profile?.role || role;
-  const isKabagUser = userRole === "kabag" || userRole === "kepala_bagian";
+  const isKabagUser = userRole === "kabag" || userRole === "kepala_bagian" || userRole === "admin" || userRole === "inputer";
 
   if (!isKabagUser) {
     return <Navigate to="/dashboard-saya" replace />;
@@ -42,7 +42,7 @@ function PegawaiRoute({ children }) {
   const { role } = useRole();
 
   const userRole = profile?.role || role;
-  const isKabagUser = userRole === "kabag" || userRole === "kepala_bagian";
+  const isKabagUser = userRole === "kabag" || userRole === "kepala_bagian" || userRole === "admin" || userRole === "inputer";
 
   if (isKabagUser) {
     return <Navigate to="/dashboard" replace />;
@@ -61,7 +61,7 @@ function PublicRoute({ children }) {
   }
 
   if (user || profile || isDemoMode) {
-    const isKabagUser = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag";
+    const isKabagUser = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag" || profile?.role === "admin" || profile?.role === "inputer";
     return <Navigate to={isKabagUser ? "/dashboard" : "/dashboard-saya"} replace />;
   }
 

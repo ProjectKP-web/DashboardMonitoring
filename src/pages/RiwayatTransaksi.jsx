@@ -49,15 +49,36 @@ export default function RiwayatTransaksi() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState(null);
 
-  const daftarProduk = [
+  const defaultDaftarProduk = [
     { id: 1, code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
     { id: 2, code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
     { id: 3, code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
     { id: 4, code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
     { id: 5, code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
     { id: 6, code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
-    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" }
+    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" },
+    { id: 8, code: "QRIS", name: "QRIS - Merchant QRIS BSI", unit: "noa" }
   ];
+
+  const [daftarProduk, setDaftarProduk] = useState(defaultDaftarProduk);
+
+  const fetchProductsFromDB = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase.from("products").select("*").order("id", { ascending: true });
+      if (!error && data && data.length > 0) {
+        const formatted = data.map((p) => ({
+          id: p.id,
+          code: p.name,
+          name: p.name === "QRIS" ? "QRIS - Merchant QRIS BSI" : p.name,
+          unit: p.measurement_type || "nominal"
+        }));
+        setDaftarProduk(formatted);
+      }
+    } catch (e) {
+      console.error("Error fetching products in RiwayatTransaksi:", e);
+    }
+  };
 
   const [dataRiwayat, setDataRiwayat] = useState([]);
 
@@ -115,6 +136,7 @@ export default function RiwayatTransaksi() {
 
   useEffect(() => {
     if (isSupabaseConfigured) {
+      fetchProductsFromDB();
       fetchTransactions();
     } else {
       setDataRiwayat([
@@ -149,9 +171,10 @@ export default function RiwayatTransaksi() {
         );
         const productId = selectedProd?.id || updated.product_id || 1;
         const isGramUnit = selectedProd?.unit === "gram";
+        const isNominalUnit = selectedProd?.unit === "nominal";
 
         const dbDate = formatDateForDB(updated.tanggal);
-        const numNominal = !isGramUnit && updated.nominalRaw ? parseFloat(updated.nominalRaw) : null;
+        const numNominal = isNominalUnit && updated.nominalRaw ? parseFloat(updated.nominalRaw) : null;
         const numGram = isGramUnit && updated.gramRaw ? parseFloat(updated.gramRaw) : null;
 
         const { error } = await supabase
@@ -212,7 +235,7 @@ export default function RiwayatTransaksi() {
             <div className="relative w-full sm:w-64">
               <input
                 type="text"
-                placeholder="Cari transaksi..."
+                placeholder="Cari produk..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -305,7 +328,7 @@ export default function RiwayatTransaksi() {
               ) : (
                 <tr>
                   <td colSpan="8" className="py-8 text-center text-slate-400 font-medium">
-                    Belum ada riwayat transaksi.
+                    Belum ada riwayat produk.
                   </td>
                 </tr>
               )}
@@ -317,7 +340,7 @@ export default function RiwayatTransaksi() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-slate-500 pt-2 gap-3">
           <div>
             Menampilkan {filteredData.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} -{" "}
-            {Math.min(currentPage * itemsPerPage, filteredData.length)} dari {filteredData.length} transaksi
+            {Math.min(currentPage * itemsPerPage, filteredData.length)} dari {filteredData.length} produk
           </div>
 
           <div className="flex items-center space-x-1">

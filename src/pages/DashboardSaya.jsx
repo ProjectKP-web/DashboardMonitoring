@@ -97,7 +97,7 @@ export default function DashboardSaya() {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-800 tracking-tight">
-            DASHBOARD SAYA
+            DASHBOARD
           </h2>
           <p className="text-sm font-semibold text-slate-500">
             Selamat Datang, <span className="text-slate-800 font-bold">{userName}</span>! Periode Aktif:{" "}
@@ -110,7 +110,7 @@ export default function DashboardSaya() {
           className="bg-[#00a0a0] hover:bg-[#008888] text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2 shadow-xs transition-colors self-start md:self-auto cursor-pointer"
         >
           <FileEdit className="w-4 h-4" />
-          <span>+ Input Transaksi Baru</span>
+          <span>+ Input Produk Baru</span>
         </Link>
       </div>
 
@@ -127,13 +127,13 @@ export default function DashboardSaya() {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Total Transaksi</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Total Produk</span>
             <FileEdit className="w-5 h-5 text-[#00a0a0]" />
           </div>
           <div className="text-2xl font-extrabold text-slate-800">{stats.totalTransactions}</div>
           <div className="text-xs font-semibold text-emerald-600 flex items-center space-x-1">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{stats.totalTransactions} transaksi bulan {currentMonthName}.</span>
+            <span>{stats.totalTransactions} produk bulan {currentMonthName}.</span>
           </div>
         </div>
 

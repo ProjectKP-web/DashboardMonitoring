@@ -90,7 +90,7 @@ export function AuthProvider({ children }) {
         // Normalisasikan bidang nip / NIP / employee_id & role
         const nipVal = data.NIP || data.nip || data.employee_id || metaNip || "-";
         const rawRole = data.role || userMeta?.role || "pegawai";
-        const isKabagRole = rawRole === "kepala_bagian" || rawRole === "kabag" || rawRole === "kepala";
+        const isKabagRole = rawRole === "kepala_bagian" || rawRole === "kabag" || rawRole === "kepala" || rawRole === "admin" || rawRole === "inputer";
         const normalizedRole = isKabagRole ? "kabag" : rawRole;
 
         const normalizedProfile = {
@@ -112,7 +112,7 @@ export function AuthProvider({ children }) {
     // Default profile fallback if DB fetch returns empty
     const nipVal = userMeta?.nip || userMeta?.NIP || userMeta?.employee_id || "-";
     const rawRole = userMeta?.role || "pegawai";
-    const isKabagRole = rawRole === "kepala_bagian" || rawRole === "kabag" || rawRole === "kepala";
+    const isKabagRole = rawRole === "kepala_bagian" || rawRole === "kabag" || rawRole === "kepala" || rawRole === "admin" || rawRole === "inputer";
     const normalizedRole = isKabagRole ? "kabag" : rawRole;
 
     const fallbackProfile = {
@@ -261,7 +261,7 @@ export function AuthProvider({ children }) {
   // Login (Support Login dengan Email atau NIP)
   const signIn = async ({ identifier, password }) => {
     if (!isSupabaseConfigured) {
-      const isKabag = identifier.toLowerCase().includes("kabag") || identifier.toLowerCase().includes("kepala");
+      const isKabag = identifier.toLowerCase().includes("kabag") || identifier.toLowerCase().includes("kepala") || identifier.toLowerCase().includes("admin");
       const role = isKabag ? "kabag" : "pegawai";
       const name = isKabag ? "Kepala Bagian BSI" : "Pegawai BSI";
       const prof = loginAsDemo(role, name, identifier);
@@ -306,12 +306,57 @@ export function AuthProvider({ children }) {
         }
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await supabase.auth.signInWithPassword({
         email: targetEmail,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        // Smart Sync Fallback: Jika login gagal karena user baru ditambahkan manual di tabel profiles database
+        const { data: profileRecord } = await supabase
+          .from("profiles")
+          .select("*")
+          .or(`email.eq.${targetEmail},NIP.eq.${targetEmail},nip.eq.${targetEmail}`)
+          .maybeSingle();
+
+        if (profileRecord && profileRecord.email) {
+          const profilePass = profileRecord.password || "";
+          if (profilePass && profilePass === password) {
+            // Daftarkan akun secara otomatis ke Supabase Auth
+            const { data: autoSignUp, error: autoSignUpErr } = await supabase.auth.signUp({
+              email: profileRecord.email,
+              password: password,
+              options: {
+                data: {
+                  full_name: profileRecord.full_name || "Admin",
+                  nip: profileRecord.NIP || profileRecord.nip || "-",
+                  role: profileRecord.role || "kabag",
+                },
+              },
+            });
+
+            if (!autoSignUpErr && autoSignUp?.user) {
+              // Update baris profiles agar ID sesuai UUID auth.users baru
+              await supabase
+                .from("profiles")
+                .update({ id: autoSignUp.user.id })
+                .eq("email", profileRecord.email);
+
+              const retrySignIn = await supabase.auth.signInWithPassword({
+                email: profileRecord.email,
+                password: password,
+              });
+
+              if (retrySignIn.data?.user) {
+                const userProf = await fetchUserProfile(retrySignIn.data.user.id, retrySignIn.data.user.email);
+                return { user: retrySignIn.data.user, profile: userProf };
+              }
+            }
+          }
+        }
+
+        throw error;
+      }
 
       let userProf = null;
       if (data.user) {

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import * as XLSX from "xlsx";
+import ProductComparisonChart from "../components/ProductComparisonChart";
 
 const getCurrentPeriode = () => {
   const d = new Date();
@@ -20,19 +21,24 @@ const getCurrentPeriode = () => {
   return `${year}-${month}`;
 };
 
-export default function RekapBulanan() {
+export default function RekapBulanan({ showChart = false, showKpi = false }) {
   const [periode, setPeriode] = useState(getCurrentPeriode);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  const masterProducts = [
+  const defaultMasterProducts = [
     { id: 1, code: "RB", name: "RB", unit: "nominal" },
     { id: 2, code: "MAXI", name: "MAXI", unit: "nominal" },
     { id: 3, code: "ABATANA", name: "ABATANA", unit: "nominal" },
     { id: 4, code: "TAB EMAS", name: "TAB EMAS", unit: "gram" },
     { id: 5, code: "TAB HAJI", name: "TAB HAJI", unit: "nominal" },
     { id: 6, code: "PEMBIAYAAN", name: "PEMBIAYAAN", unit: "nominal" },
-    { id: 7, code: "CILEM", name: "CILEM", unit: "gram" }
+    { id: 7, code: "CILEM", name: "CILEM", unit: "gram" },
+    { id: 8, code: "QRIS", name: "QRIS", unit: "noa" }
   ];
+
+  const [masterProducts, setMasterProducts] = useState(defaultMasterProducts);
 
   const [kpi, setKpi] = useState({
     totalPegawai: 14,
@@ -42,6 +48,8 @@ export default function RekapBulanan() {
   });
 
   const [dataPegawai, setDataPegawai] = useState([]);
+  const [grandProductStats, setGrandProductStats] = useState({});
+  const [allTransactions, setAllTransactions] = useState([]);
 
   const [totalRow, setTotalRow] = useState({
     nama: "TOTAL",
@@ -58,45 +66,60 @@ export default function RekapBulanan() {
     pembiayaanNoa: 0,
     pembiayaanNom: "0",
     cilemNoa: 0,
-    cilemGram: "0,00"
+    cilemGram: "0,00",
+    qrisNoa: 0,
+    qrisNom: "-"
   });
 
   const fetchMonthlyRecap = async () => {
     if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
-      const { data: profiles } = await supabase.from("profiles").select("*");
+      const { data: dbProds } = await supabase.from("products").select("*").order("id", { ascending: true });
+      let currentMaster = defaultMasterProducts;
+      if (dbProds && dbProds.length > 0) {
+        currentMaster = dbProds.map((p) => ({
+          id: p.id,
+          code: p.name,
+          name: p.name,
+          unit: p.measurement_type || "nominal"
+        }));
+        setMasterProducts(currentMaster);
+      }
+
+      const { data: dbPegawai } = await supabase.from("pegawai").select("*").order("nama", { ascending: true });
       const { data: txs } = await supabase.from("transactions").select("*, products(id, name, measurement_type)");
+      setAllTransactions(txs || []);
 
       const filteredTxs = (txs || []).filter((item) => {
         const itemDate = item.transaction_date || "";
         return !periode || itemDate.startsWith(periode);
       });
 
-      // Build employee list directly from database profiles
+      // Build employee list directly from database pegawai table
       let employeeList = [];
-      if (profiles && profiles.length > 0) {
-        employeeList = profiles.map((p) => ({
+      if (dbPegawai && dbPegawai.length > 0) {
+        employeeList = dbPegawai.map((p) => ({
           id: p.id,
           dbIds: [p.id],
-          nama: (p.full_name || p.email?.split("@")[0] || "PEGAWAI").toUpperCase()
+          nama: (p.nama || "PEGAWAI").toUpperCase()
         }));
       } else {
         employeeList = [
-          { id: "vanny", dbIds: ["0c8cf587-370b-4ccb-969e-244685919156", "demo-user-id"], nama: "VANNY" },
-          { id: "bethari", dbIds: [], nama: "BETHARI" },
-          { id: "zharif", dbIds: [], nama: "ZHARIF" },
-          { id: "rizky", dbIds: [], nama: "RIZKY" },
-          { id: "lili", dbIds: [], nama: "LILI" },
-          { id: "nisa", dbIds: [], nama: "NISA" },
-          { id: "ardi", dbIds: [], nama: "ARDI" },
-          { id: "okta", dbIds: [], nama: "OKTA" },
-          { id: "hendra", dbIds: [], nama: "HENDRA" },
-          { id: "rico", dbIds: [], nama: "RICO" },
-          { id: "rian", dbIds: [], nama: "RIAN" },
-          { id: "syaiful", dbIds: [], nama: "SYAIFUL" },
-          { id: "rahmad", dbIds: [], nama: "RAHMAD" },
-          { id: "suhadi", dbIds: [], nama: "SUHADI" }
+          { id: 1, dbIds: [1], nama: "VANNY" },
+          { id: 2, dbIds: [2], nama: "BETHARI" },
+          { id: 3, dbIds: [3], nama: "ZHARIF" },
+          { id: 4, dbIds: [4], nama: "RIZKY" },
+          { id: 5, dbIds: [5], nama: "LILI" },
+          { id: 6, dbIds: [6], nama: "NISA" },
+          { id: 7, dbIds: [7], nama: "ARDI" },
+          { id: 8, dbIds: [8], nama: "OKTA" },
+          { id: 9, dbIds: [9], nama: "HENDRA" },
+          { id: 10, dbIds: [10], nama: "RICO" },
+          { id: 11, dbIds: [11], nama: "RIAN" },
+          { id: 12, dbIds: [12], nama: "SYAIFUL" },
+          { id: 13, dbIds: [13], nama: "RAHMAD" },
+          { id: 14, dbIds: [14], nama: "SUHADI" }
         ];
       }
 
@@ -104,7 +127,7 @@ export default function RekapBulanan() {
       const matrix = {};
       employeeList.forEach((emp) => {
         matrix[emp.id] = {};
-        masterProducts.forEach((p) => {
+        currentMaster.forEach((p) => {
           matrix[emp.id][p.id] = { noa: 0, nominal: 0, gram: 0 };
         });
       });
@@ -114,34 +137,27 @@ export default function RekapBulanan() {
       let grandGram = 0;
 
       const grandProductStats = {};
-      masterProducts.forEach((p) => {
+      currentMaster.forEach((p) => {
         grandProductStats[p.id] = { noa: 0, nominal: 0, gram: 0 };
       });
 
       filteredTxs.forEach((tx) => {
         const prodName = (tx.products?.name || "").toUpperCase();
-        const matchProd = masterProducts.find(
+        const matchProd = currentMaster.find(
           (p) => p.id === Number(tx.product_id) || p.code.toUpperCase() === prodName
         );
         const pid = matchProd ? matchProd.id : 1;
 
-        // Target employee row
-        let targetEmp = employeeList.find((e) => e.dbIds.includes(tx.user_id));
-        if (!targetEmp) {
-          const empName = `PEGAWAI (${tx.user_id ? tx.user_id.slice(0, 6) : "UNKNOWN"})`;
-          targetEmp = { id: tx.user_id || "unknown", dbIds: [tx.user_id], nama: empName };
-          employeeList.push(targetEmp);
-          matrix[targetEmp.id] = {};
-          masterProducts.forEach((p) => {
-            matrix[targetEmp.id][p.id] = { noa: 0, nominal: 0, gram: 0 };
-          });
-        }
+        // Target employee row strictly by pegawai_id (referral employee)
+        const targetEmp = employeeList.find(
+          (e) => String(e.id) === String(tx.pegawai_id) || (e.dbIds && e.dbIds.includes(tx.pegawai_id))
+        );
 
         const noa = Number(tx.noa) || 0;
         const nominal = Number(tx.nominal) || 0;
         const gram = Number(tx.gram) || 0;
 
-        if (matrix[targetEmp.id] && matrix[targetEmp.id][pid]) {
+        if (targetEmp && matrix[targetEmp.id] && matrix[targetEmp.id][pid]) {
           matrix[targetEmp.id][pid].noa += noa;
           matrix[targetEmp.id][pid].nominal += nominal;
           matrix[targetEmp.id][pid].gram += gram;
@@ -175,7 +191,9 @@ export default function RekapBulanan() {
           pembiayaanNoa: pStats[6]?.noa ? pStats[6].noa : "-",
           pembiayaanNom: pStats[6]?.nominal ? Number(pStats[6].nominal).toLocaleString("id-ID") : "-",
           cilemNoa: pStats[7]?.noa ? pStats[7].noa : "-",
-          cilemGram: pStats[7]?.gram ? Number(pStats[7].gram).toFixed(2).replace(".", ",") : "-"
+          cilemGram: pStats[7]?.gram ? Number(pStats[7].gram).toFixed(2).replace(".", ",") : "-",
+          qrisNoa: pStats[8]?.noa ? pStats[8].noa : "-",
+          qrisNom: "-"
         };
       });
 
@@ -183,21 +201,25 @@ export default function RekapBulanan() {
 
       setTotalRow({
         nama: "TOTAL",
-        rbNoa: grandProductStats[1].noa || "-",
-        rbNom: grandProductStats[1].nominal ? Number(grandProductStats[1].nominal).toLocaleString("id-ID") : "-",
-        maxiNoa: grandProductStats[2].noa || "-",
-        maxiNom: grandProductStats[2].nominal ? Number(grandProductStats[2].nominal).toLocaleString("id-ID") : "-",
-        abatanaNoa: grandProductStats[3].noa || "-",
-        abatanaNom: grandProductStats[3].nominal ? Number(grandProductStats[3].nominal).toLocaleString("id-ID") : "-",
-        emasNoa: grandProductStats[4].noa || "-",
-        emasGram: grandProductStats[4].gram ? Number(grandProductStats[4].gram).toFixed(2).replace(".", ",") : "-",
-        hajiNoa: grandProductStats[5].noa || "-",
-        hajiNom: grandProductStats[5].nominal ? Number(grandProductStats[5].nominal).toLocaleString("id-ID") : "-",
-        pembiayaanNoa: grandProductStats[6].noa || "-",
-        pembiayaanNom: grandProductStats[6].nominal ? Number(grandProductStats[6].nominal).toLocaleString("id-ID") : "-",
-        cilemNoa: grandProductStats[7].noa || "-",
-        cilemGram: grandProductStats[7].gram ? Number(grandProductStats[7].gram).toFixed(2).replace(".", ",") : "-"
+        rbNoa: grandProductStats[1]?.noa || "-",
+        rbNom: grandProductStats[1]?.nominal ? Number(grandProductStats[1].nominal).toLocaleString("id-ID") : "-",
+        maxiNoa: grandProductStats[2]?.noa || "-",
+        maxiNom: grandProductStats[2]?.nominal ? Number(grandProductStats[2].nominal).toLocaleString("id-ID") : "-",
+        abatanaNoa: grandProductStats[3]?.noa || "-",
+        abatanaNom: grandProductStats[3]?.nominal ? Number(grandProductStats[3].nominal).toLocaleString("id-ID") : "-",
+        emasNoa: grandProductStats[4]?.noa || "-",
+        emasGram: grandProductStats[4]?.gram ? Number(grandProductStats[4].gram).toFixed(2).replace(".", ",") : "-",
+        hajiNoa: grandProductStats[5]?.noa || "-",
+        hajiNom: grandProductStats[5]?.nominal ? Number(grandProductStats[5].nominal).toLocaleString("id-ID") : "-",
+        pembiayaanNoa: grandProductStats[6]?.noa || "-",
+        pembiayaanNom: grandProductStats[6]?.nominal ? Number(grandProductStats[6].nominal).toLocaleString("id-ID") : "-",
+        cilemNoa: grandProductStats[7]?.noa || "-",
+        cilemGram: grandProductStats[7]?.gram ? Number(grandProductStats[7].gram).toFixed(2).replace(".", ",") : "-",
+        qrisNoa: grandProductStats[8]?.noa || "-",
+        qrisNom: "-"
       });
+
+      setGrandProductStats(grandProductStats);
 
       setKpi({
         totalPegawai: employeeList.length,
@@ -225,7 +247,17 @@ export default function RekapBulanan() {
         nama: "TOTAL",
         rbNoa: 12, rbNom: "120.000.000", maxiNoa: 8, maxiNom: "60.000.000", abatanaNoa: 5, abatanaNom: "45.000.000",
         emasNoa: 12, emasGram: "29,00", hajiNoa: 5, hajiNom: "45.000.000", pembiayaanNoa: 9, pembiayaanNom: "90.000.000",
-        cilemNoa: 6, cilemGram: "15,00"
+        cilemNoa: 6, cilemGram: "15,00", qrisNoa: 10, qrisNom: "-"
+      });
+      setGrandProductStats({
+        1: { noa: 12, nominal: 120000000, gram: 0 },
+        2: { noa: 8, nominal: 60000000, gram: 0 },
+        3: { noa: 5, nominal: 45000000, gram: 0 },
+        4: { noa: 12, nominal: 0, gram: 29 },
+        5: { noa: 5, nominal: 45000000, gram: 0 },
+        6: { noa: 9, nominal: 90000000, gram: 0 },
+        7: { noa: 6, nominal: 0, gram: 15 },
+        8: { noa: 10, nominal: 0, gram: 0 }
       });
       setKpi({
         totalPegawai: 14,
@@ -251,7 +283,8 @@ export default function RekapBulanan() {
       "TAB EMAS", "",
       "TAB HAJI", "",
       "PEMBIAYAAN", "",
-      "CILEM", ""
+      "CILEM", "",
+      "QRIS"
     ];
 
     // Row 2: Sub Headers
@@ -263,7 +296,8 @@ export default function RekapBulanan() {
       "NOA", "Gram",
       "NOA", "Nominal",
       "NOA", "Nominal",
-      "NOA", "Gram"
+      "NOA", "Gram",
+      "NOA"
     ];
 
     // Data Rows
@@ -275,7 +309,8 @@ export default function RekapBulanan() {
       row.emasNoa || 0, row.emasGram || "0,00",
       row.hajiNoa || 0, row.hajiNom || "0",
       row.pembiayaanNoa || 0, row.pembiayaanNom || "0",
-      row.cilemNoa || 0, row.cilemGram || "0,00"
+      row.cilemNoa || 0, row.cilemGram || "0,00",
+      row.qrisNoa || 0
     ]);
 
     // Total Row
@@ -287,7 +322,8 @@ export default function RekapBulanan() {
       totalRow.emasNoa || 0, totalRow.emasGram || "0,00",
       totalRow.hajiNoa || 0, totalRow.hajiNom || "0",
       totalRow.pembiayaanNoa || 0, totalRow.pembiayaanNom || "0",
-      totalRow.cilemNoa || 0, totalRow.cilemGram || "0,00"
+      totalRow.cilemNoa || 0, totalRow.cilemGram || "0,00",
+      totalRow.qrisNoa || 0
     ];
 
     const sheetData = [headerRow1, headerRow2, ...rows, totalLine];
@@ -332,6 +368,7 @@ export default function RekapBulanan() {
         <td>${row.hajiNoa || 0}</td><td style="text-align: right;">${row.hajiNom || '0'}</td>
         <td>${row.pembiayaanNoa || 0}</td><td style="text-align: right;">${row.pembiayaanNom || '0'}</td>
         <td>${row.cilemNoa || 0}</td><td style="text-align: right;">${row.cilemGram || '0,00'}</td>
+        <td style="font-weight: bold;">${row.qrisNoa || 0}</td>
       </tr>
     `).join("");
 
@@ -345,6 +382,7 @@ export default function RekapBulanan() {
         <td>${totalRow.hajiNoa || 0}</td><td style="text-align: right;">${totalRow.hajiNom || '0'}</td>
         <td>${totalRow.pembiayaanNoa || 0}</td><td style="text-align: right;">${totalRow.pembiayaanNom || '0'}</td>
         <td>${totalRow.cilemNoa || 0}</td><td style="text-align: right;">${totalRow.cilemGram || '0,00'}</td>
+        <td style="font-weight: bold;">${totalRow.qrisNoa || 0}</td>
       </tr>
     `;
 
@@ -382,6 +420,7 @@ export default function RekapBulanan() {
               <th colspan="2">TAB HAJI</th>
               <th colspan="2">PEMBIAYAAN</th>
               <th colspan="2">CILEM</th>
+              <th>QRIS</th>
             </tr>
             <tr class="sub-th">
               <th>NOA</th><th>NOMINAL</th>
@@ -391,6 +430,7 @@ export default function RekapBulanan() {
               <th>NOA</th><th>NOMINAL</th>
               <th>NOA</th><th>NOMINAL</th>
               <th>NOA</th><th>GRAM</th>
+              <th>NOA</th>
             </tr>
           </thead>
           <tbody>
@@ -432,8 +472,9 @@ export default function RekapBulanan() {
               <input
                 type="month"
                 value={periode}
+                onClick={(e) => e.target.showPicker && e.target.showPicker()}
                 onChange={(e) => setPeriode(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg text-sm px-3 py-2 font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#009688]"
+                className="bg-white border border-slate-300 rounded-lg text-sm px-3 py-2 font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#009688] cursor-pointer"
               />
             </div>
           </div>
@@ -449,71 +490,82 @@ export default function RekapBulanan() {
         </div>
       </div>
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: TOTAL PEGAWAI AKTIF */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
-            <Users className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              TOTAL PEGAWAI AKTIF
+      {/* KPI Cards Row (Rendered when showKpi is true) */}
+      {showKpi && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: TOTAL PEGAWAI AKTIF */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
+              <Users className="w-6 h-6" />
             </div>
-            <div className="text-2xl font-extrabold text-slate-800">{kpi.totalPegawai}</div>
-            <div className="text-xs font-semibold text-[#00a0a0]">Pegawai</div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                TOTAL PEGAWAI AKTIF
+              </div>
+              <div className="text-2xl font-extrabold text-slate-800">{kpi.totalPegawai}</div>
+              <div className="text-xs font-semibold text-[#00a0a0]">Pegawai</div>
+            </div>
           </div>
-        </div>
 
-        {/* Card 2: TOTAL NOA */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-full border-2 border-[#f0b43c] bg-amber-50 flex items-center justify-center text-[#f0b43c] shrink-0 font-bold text-xs">
-            NOA
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              TOTAL NOA
+          {/* Card 2: TOTAL NOA */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-full border-2 border-[#f0b43c] bg-amber-50 flex items-center justify-center text-[#f0b43c] shrink-0 font-bold text-xs">
+              NOA
             </div>
-            <div className="text-2xl font-extrabold text-slate-800">{kpi.totalNoa}</div>
-            <div className="text-xs font-semibold text-slate-500">NOA</div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                TOTAL NOA
+              </div>
+              <div className="text-2xl font-extrabold text-slate-800">{kpi.totalNoa}</div>
+              <div className="text-xs font-semibold text-slate-500">NOA</div>
+            </div>
           </div>
-        </div>
 
-        {/* Card 3: TOTAL NOMINAL */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
-            <Banknote className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              TOTAL NOMINAL
+          {/* Card 3: TOTAL NOMINAL */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
+              <Banknote className="w-6 h-6" />
             </div>
-            <div className="text-xl font-extrabold text-slate-800">
-              Rp {Number(kpi.totalNominal).toLocaleString("id-ID")}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                TOTAL NOMINAL
+              </div>
+              <div className="text-xl font-extrabold text-slate-800">
+                Rp {Number(kpi.totalNominal).toLocaleString("id-ID")}
+              </div>
+              <div className="text-xs font-semibold text-[#00a0a0]">Nominal</div>
             </div>
-            <div className="text-xs font-semibold text-[#00a0a0]">Nominal</div>
           </div>
-        </div>
 
-        {/* Card 4: TOTAL GRAM */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-            <Coins className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              TOTAL GRAM
+          {/* Card 4: TOTAL GRAM */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+              <Coins className="w-6 h-6" />
             </div>
-            <div className="text-2xl font-extrabold text-slate-800">
-              {Number(kpi.totalGram).toFixed(2).replace(".", ",")}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                TOTAL GRAM
+              </div>
+              <div className="text-2xl font-extrabold text-slate-800">
+                {Number(kpi.totalGram).toFixed(2).replace(".", ",")}
+              </div>
+              <div className="text-xs font-semibold text-amber-600">Gram</div>
             </div>
-            <div className="text-xs font-semibold text-amber-600">Gram</div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Product Comparison Chart (Rendered when showChart is true) */}
+      {showChart && (
+        <ProductComparisonChart
+          masterProducts={masterProducts}
+          allTransactions={allTransactions}
+          periode={periode}
+        />
+      )}
 
       {/* Main Data Section: REKAP PER PEGAWAI */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden relative">
+      <div className="bg-[#ffffff] rounded-2xl border border-slate-200 shadow-xs overflow-hidden relative">
         {loading && (
           <div className="absolute inset-0 bg-white/70 backdrop-blur-xs flex items-center justify-center z-10">
             <div className="flex items-center space-x-2 text-xs font-bold text-[#00a0a0]">
@@ -563,7 +615,8 @@ export default function RekapBulanan() {
                 <th colSpan="2" className="py-2 px-2 border-r border-slate-200">TAB EMAS</th>
                 <th colSpan="2" className="py-2 px-2 border-r border-slate-200">TAB HAJI</th>
                 <th colSpan="2" className="py-2 px-2 border-r border-slate-200">PEMBIAYAAN</th>
-                <th colSpan="2" className="py-2 px-2">CILEM</th>
+                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">CILEM</th>
+                <th className="py-2 px-2">QRIS</th>
               </tr>
               {/* Row 2 Sub-Header */}
               <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
@@ -581,34 +634,38 @@ export default function RekapBulanan() {
                 <th className="py-2 px-2 border-r border-slate-200">NOA</th>
                 <th className="py-2 px-2 border-r border-slate-200">Nominal</th>
                 <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2">Gram</th>
+                <th className="py-2 px-2 border-r border-slate-200">Gram</th>
+                <th className="py-2 px-2">NOA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {dataPegawai.map((row, idx) => (
-                <tr
-                  key={idx}
-                  className="hover:bg-slate-50/80 transition-colors font-medium"
-                >
-                  <td className="py-2.5 px-4 text-left font-bold text-slate-800 border-r border-slate-100">
-                    {row.nama}
-                  </td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.rbNoa}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.rbNom}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.maxiNoa}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.maxiNom}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.abatanaNoa}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.abatanaNom}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.emasNoa}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.emasGram}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.hajiNoa}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.hajiNom}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.pembiayaanNoa}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.pembiayaanNom}</td>
-                  <td className="py-2.5 px-2 border-r border-slate-100">{row.cilemNoa}</td>
-                  <td className="py-2.5 px-2">{row.cilemGram}</td>
-                </tr>
-              ))}
+              {dataPegawai
+                .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                .map((row, idx) => (
+                  <tr
+                    key={idx}
+                    className="hover:bg-slate-50/80 transition-colors font-medium"
+                  >
+                    <td className="py-2.5 px-4 text-left font-bold text-slate-800 border-r border-slate-100">
+                      {row.nama}
+                    </td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.rbNoa}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.rbNom}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.maxiNoa}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.maxiNom}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.abatanaNoa}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.abatanaNom}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.emasNoa}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.emasGram}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.hajiNoa}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.hajiNom}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.pembiayaanNoa}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.pembiayaanNom}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.cilemNoa}</td>
+                    <td className="py-2.5 px-2 border-r border-slate-100">{row.cilemGram}</td>
+                    <td className="py-2.5 px-2 font-bold text-slate-800">{row.qrisNoa}</td>
+                  </tr>
+                ))}
 
               {/* TOTAL ROW */}
               <tr className="bg-[#e6f5f5] font-extrabold text-[#008888] border-t-2 border-slate-200">
@@ -628,18 +685,53 @@ export default function RekapBulanan() {
                 <td className="py-3 px-2 border-r border-slate-200">{totalRow.pembiayaanNoa}</td>
                 <td className="py-3 px-2 border-r border-slate-200">{totalRow.pembiayaanNom}</td>
                 <td className="py-3 px-2 border-r border-slate-200">{totalRow.cilemNoa}</td>
-                <td className="py-3 px-2">{totalRow.cilemGram}</td>
+                <td className="py-3 px-2 border-r border-slate-200">{totalRow.cilemGram}</td>
+                <td className="py-3 px-2 font-black">{totalRow.qrisNoa}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        {/* Footer Disclaimer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center space-x-2 text-xs text-slate-500">
-          <Info className="w-4 h-4 text-slate-400 shrink-0" />
-          <span>
-            Data diambil dari transaksi yang telah diinput pada periode 01 September 2026 - 30 September 2026
-          </span>
+        {/* Footer Disclaimer & Pagination */}
+        <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-slate-500">
+          <div className="flex items-center space-x-2">
+            <Info className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>
+              Menampilkan <strong className="text-slate-800">{dataPegawai.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</strong> - <strong className="text-slate-800">{Math.min(currentPage * itemsPerPage, dataPegawai.length)}</strong> dari <strong className="text-slate-800">{dataPegawai.length}</strong> pegawai
+            </span>
+          </div>
+
+          {Math.ceil(dataPegawai.length / itemsPerPage) > 1 && (
+            <div className="flex items-center space-x-1.5 self-end sm:self-auto">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Sebelumnya
+              </button>
+              {Array.from({ length: Math.ceil(dataPegawai.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    currentPage === page
+                      ? "bg-[#00a0a0] text-white"
+                      : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, Math.ceil(dataPegawai.length / itemsPerPage)))}
+                disabled={currentPage === Math.ceil(dataPegawai.length / itemsPerPage)}
+                className="px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Selanjutnya
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
