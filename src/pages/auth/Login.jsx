@@ -69,15 +69,7 @@ export default function Login() {
         <p className="text-xs text-slate-500">Dashboard Monitoring BSI</p>
       </div>
 
-      {idleExpired && (
-        <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start space-x-2 shadow-xs">
-          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold block text-amber-950">Sesi Berakhir Otomatis</span>
-            Sesi Anda telah keluar secara otomatis karena tidak ada aktivitas (inactivity timeout). Silakan masuk kembali.
-          </div>
-        </div>
-      )}
+
 
       {!isConfigured && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start space-x-2">
