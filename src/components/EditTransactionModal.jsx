@@ -56,7 +56,8 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
       setTanggal(isoDate || new Date().toISOString().split("T")[0]);
       setProduk(transaction.produkCode || transaction.produk || "RB");
       setNoa(transaction.noa || 1);
-      setNominal(transaction.nominalRaw !== undefined && transaction.nominalRaw !== null ? transaction.nominalRaw : "");
+      const rawNom = transaction.nominalRaw !== undefined && transaction.nominalRaw !== null ? String(transaction.nominalRaw).replace(/[^0-9]/g, "") : "";
+      setNominal(rawNom ? Number(rawNom).toLocaleString("id-ID") : "");
       setGram(transaction.gramRaw !== undefined && transaction.gramRaw !== null ? transaction.gramRaw : "");
       setKeterangan(transaction.keterangan || "");
     }
@@ -69,6 +70,7 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
   const handleSubmit = (e) => {
     e.preventDefault();
     const selectedProd = daftarProduk.find((p) => p.code === produk || p.id === Number(produk));
+    const rawNomStr = nominal ? nominal.toString().replace(/\./g, "") : "";
     onSave({
       ...transaction,
       tanggal,
@@ -76,8 +78,8 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
       produk: selectedProd?.name || produk,
       produkCode: selectedProd?.code || produk,
       noa: Number(noa),
-      nominal: selectedProd?.unit === "nominal" && nominal ? Number(nominal).toLocaleString("id-ID") : "-",
-      nominalRaw: nominal,
+      nominal: selectedProd?.unit === "nominal" && rawNomStr ? Number(rawNomStr).toLocaleString("id-ID") : "-",
+      nominalRaw: rawNomStr,
       gram: selectedProd?.unit === "gram" && gram ? Number(gram).toFixed(2).replace(".", ",") : "-",
       gramRaw: gram,
       keterangan
@@ -136,10 +138,19 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Nominal (Rp)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={nominal}
-                  onChange={(e) => setNominal(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-[#009688] outline-hidden"
+                  onChange={(e) => {
+                    const rawVal = e.target.value.replace(/[^0-9]/g, "");
+                    if (!rawVal) {
+                      setNominal("");
+                    } else {
+                      setNominal(Number(rawVal).toLocaleString("id-ID"));
+                    }
+                  }}
+                  placeholder="Contoh: 20.000.000"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold focus:ring-2 focus:ring-[#009688] outline-hidden"
                 />
               </div>
             )}

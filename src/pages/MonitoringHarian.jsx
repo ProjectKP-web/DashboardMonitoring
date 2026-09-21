@@ -8,11 +8,19 @@ export default function MonitoringHarian() {
   const { user, profile } = useAuth();
   const { role } = useRole();
 
-  const isKabag = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag";
+  const userRole = profile?.role || role;
+  const isKabag = userRole === "kabag" || userRole === "kepala_bagian" || userRole === "kepala" || userRole === "admin" || userRole === "inputer";
   const currentUserId = user?.id || profile?.id;
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const getTodayISO = () => {
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, "0");
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const y = now.getFullYear();
+    return `${y}-${m}-${d}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getTodayISO);
   const [loading, setLoading] = useState(false);
   const [dailyLogs, setDailyLogs] = useState([]);
   const [summary, setSummary] = useState({
@@ -34,8 +42,7 @@ export default function MonitoringHarian() {
 
       let query = supabase
         .from("transactions")
-        .select("*, products(id, name, measurement_type), pegawai(id, nama)")
-        .eq("transaction_date", selectedDate)
+        .select("*, products(id, name, measurement_type)")
         .order("created_at", { ascending: false });
 
       if (!isKabag) {
@@ -51,10 +58,16 @@ export default function MonitoringHarian() {
       if (error) {
         console.error("Error fetching daily logs:", error);
       } else if (data) {
+        const filteredData = data.filter((item) => {
+          if (!selectedDate) return true;
+          const tDate = item.transaction_date || "";
+          return tDate.startsWith(selectedDate);
+        });
+
         let nomSum = 0;
         let gramSum = 0;
 
-        const formatted = data.map((item) => {
+        const formatted = filteredData.map((item) => {
           const jam = item.created_at ? new Date(item.created_at).toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' }) : "12:00";
           const empName = item.pegawai?.nama ? item.pegawai.nama.toUpperCase() : (pegawaiMap[item.pegawai_id] || "PEGAWAI BSI");
           const prodCode = item.products?.name || "RB";
@@ -78,7 +91,7 @@ export default function MonitoringHarian() {
 
         setDailyLogs(formatted);
         setSummary({
-          totalInput: data.length,
+          totalInput: filteredData.length,
           totalNominal: nomSum,
           totalGram: gramSum
         });
@@ -93,6 +106,21 @@ export default function MonitoringHarian() {
   useEffect(() => {
     if (isSupabaseConfigured) {
       fetchDailyLogs();
+
+      const channel = supabase
+        .channel("realtime-monitoring-harian")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "transactions" },
+          () => {
+            fetchDailyLogs();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [selectedDate, user, profile, role]);
 

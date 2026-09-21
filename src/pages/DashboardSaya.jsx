@@ -35,15 +35,7 @@ export default function DashboardSaya() {
     if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
-      let query = supabase.from("transactions").select("*");
-
-      if (currentUserId && currentUserId !== "demo-user-id") {
-        query = query.eq("user_id", currentUserId);
-      } else {
-        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
-      }
-
-      const { data, error } = await query;
+      const { data, error } = await supabase.from("transactions").select("*");
 
       if (error) {
         console.error("Error fetching dashboard stats:", error);
@@ -81,6 +73,22 @@ export default function DashboardSaya() {
   useEffect(() => {
     if (isSupabaseConfigured) {
       fetchDashboardStats();
+
+      // Realtime Listener: auto-update instantly when Kabag or anyone inputs transactions
+      const channel = supabase
+        .channel("realtime-dashboard-saya")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "transactions" },
+          () => {
+            fetchDashboardStats();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     } else {
       setStats({
         totalTransactions: 0,

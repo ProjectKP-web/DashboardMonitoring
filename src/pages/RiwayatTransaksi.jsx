@@ -35,7 +35,8 @@ export default function RiwayatTransaksi() {
   const { user, profile } = useAuth();
   const { role } = useRole();
 
-  const isKabag = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag";
+  const userRole = profile?.role || role;
+  const isKabag = userRole === "kabag" || userRole === "kepala_bagian" || userRole === "kepala" || userRole === "admin" || userRole === "inputer";
   const currentUserId = user?.id || profile?.id;
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -91,10 +92,17 @@ export default function RiwayatTransaksi() {
         .select("*, products(id, name, measurement_type)")
         .order("created_at", { ascending: false });
 
-      if (currentUserId && currentUserId !== "demo-user-id") {
-        query = query.eq("user_id", currentUserId);
+      const isValidUUID = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      let targetUserId = user?.id;
+      if (!isValidUUID(targetUserId)) {
+        targetUserId = profile?.id;
+      }
+
+      if (isValidUUID(targetUserId)) {
+        query = query.eq("user_id", targetUserId);
       } else {
-        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
+        query = query.eq("user_id", "0c8cf587-370b-4ccb-969e-244685919156");
       }
 
       const { data, error } = await query;
@@ -102,6 +110,13 @@ export default function RiwayatTransaksi() {
       if (error) {
         console.error("Error fetching transactions:", error);
       } else if (data) {
+        const { data: dbPegawai } = await supabase.from("pegawai").select("*");
+        const activePegawai = dbPegawai || [];
+        const pegawaiMap = {};
+        (activePegawai || []).forEach((p) => {
+          if (p.id) pegawaiMap[String(p.id)] = (p.nama || "").toUpperCase();
+        });
+
         const formatted = data.map((item) => {
           const prodInfo = item.products || {};
           const prodCode = prodInfo.name || "RB";
@@ -109,10 +124,14 @@ export default function RiwayatTransaksi() {
             (p) => p.code.toUpperCase() === prodCode.toUpperCase() || p.id === item.product_id
           );
 
+          const pegawaiNama = pegawaiMap[String(item.pegawai_id)] || (activePegawai.find((p) => String(p.id) === String(item.pegawai_id))?.nama || "").toUpperCase() || "-";
+
           return {
             id: item.id,
             user_id: item.user_id,
             product_id: item.product_id,
+            pegawai_id: item.pegawai_id,
+            pegawaiNama,
             tanggal: formatDateForDisplay(item.transaction_date),
             rawDate: item.transaction_date,
             produk: matchMaster?.name || prodCode,
@@ -203,7 +222,8 @@ export default function RiwayatTransaksi() {
   const filteredData = dataRiwayat.filter((i) => {
     const matchSearch =
       (i.tanggal || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (i.produk || "").toLowerCase().includes(searchTerm.toLowerCase());
+      (i.produk || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (i.pegawaiNama || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchProduct = filterProduk === "ALL" || i.produkCode === filterProduk;
     return matchSearch && matchProduct;
   });
@@ -222,7 +242,7 @@ export default function RiwayatTransaksi() {
           <History className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-slate-800 tracking-tight">RIWAYAT INPUTAN SAYA</h2>
+          <h2 className="text-lg font-bold text-slate-800 tracking-tight">RIWAYAT INPUTAN</h2>
           <p className="text-xs text-slate-500 font-medium">Daftar seluruh riwayat inputan yang Anda lakukan</p>
         </div>
       </div>
@@ -282,14 +302,14 @@ export default function RiwayatTransaksi() {
           <table className="w-full text-xs text-center border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                <th className="py-3 px-3">No</th>
-                <th className="py-3 px-3">Tanggal</th>
-                <th className="py-3 px-3 text-left">Produk</th>
-                <th className="py-3 px-3">NOA</th>
-                <th className="py-3 px-3 text-right">Nominal (Rp)</th>
-                <th className="py-3 px-3 text-right">Gram</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3">Aksi</th>
+                <th className="py-3 px-3 min-w-[40px]">No</th>
+                <th className="py-3 px-3 min-w-[90px]">Tanggal</th>
+                <th className="py-3 px-3 text-left min-w-[140px]">Nama Referral</th>
+                <th className="py-3 px-3 text-left min-w-[120px]">Produk</th>
+                <th className="py-3 px-3 min-w-[50px]">NOA</th>
+                <th className="py-3 px-3 text-right min-w-[110px]">Nominal (Rp)</th>
+                <th className="py-3 px-3 text-right min-w-[80px]">Gram</th>
+                <th className="py-3 px-3 min-w-[80px]">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -300,11 +320,11 @@ export default function RiwayatTransaksi() {
                       {(currentPage - 1) * itemsPerPage + idx + 1}
                     </td>
                     <td className="py-3 px-3">{row.tanggal}</td>
+                    <td className="py-3 px-3 text-left font-bold text-slate-900">{row.pegawaiNama || "-"}</td>
                     <td className="py-3 px-3 text-left font-bold text-slate-800">{row.produk}</td>
                     <td className="py-3 px-3 font-bold">{row.noa}</td>
                     <td className="py-3 px-3 text-right font-semibold">{row.nominal}</td>
                     <td className="py-3 px-3 text-right font-bold text-amber-600">{row.gram}</td>
-                    <td className="py-3 px-3"><StatusBadge status={row.status} /></td>
                     <td className="py-3 px-3">
                       <div className="flex items-center justify-center space-x-1.5">
                         <button

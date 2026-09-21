@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import ProductComparisonChart from "../components/ProductComparisonChart";
 
 const getCurrentPeriode = () => {
@@ -19,6 +21,18 @@ const getCurrentPeriode = () => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
+};
+
+const formatPeriodeMonthYearUpper = (periodeStr) => {
+  if (!periodeStr || !periodeStr.includes("-")) return (periodeStr || "").toUpperCase();
+  const [y, m] = periodeStr.split("-");
+  const monthNamesId = [
+    "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
+    "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"
+  ];
+  const idx = parseInt(m, 10) - 1;
+  const mName = monthNamesId[idx] || m;
+  return `${mName} ${y}`;
 };
 
 export default function RekapBulanan({ showChart = false, showKpi = false }) {
@@ -274,6 +288,13 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
       return;
     }
 
+    const periodeText = formatPeriodeMonthYearUpper(periode);
+
+    // Title Rows
+    const titleRow1 = ["LAPORAN REKAP MONITORING BULANAN"];
+    const titleRow2 = [`KANTOR CABANG: KC PEKANBARU SUDIRMAN 1   |   PERIODE: ${periodeText}`];
+    const blankRow = [];
+
     // Row 1: Main Product Headers
     const headerRow1 = [
       "Nama Referral",
@@ -326,24 +347,27 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
       totalRow.qrisNoa || 0
     ];
 
-    const sheetData = [headerRow1, headerRow2, ...rows, totalLine];
+    const sheetData = [titleRow1, titleRow2, blankRow, headerRow1, headerRow2, ...rows, totalLine];
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
-    // Merge product headers
+    // Merge cells: Title rows + Product headers
     ws["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-      { s: { r: 0, c: 1 }, e: { r: 0, c: 2 } },
-      { s: { r: 0, c: 3 }, e: { r: 0, c: 4 } },
-      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },
-      { s: { r: 0, c: 7 }, e: { r: 0, c: 8 } },
-      { s: { r: 0, c: 9 }, e: { r: 0, c: 10 } },
-      { s: { r: 0, c: 11 }, e: { r: 0, c: 12 } },
-      { s: { r: 0, c: 13 }, e: { r: 0, c: 14 } }
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 15 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 15 } },
+      { s: { r: 3, c: 0 }, e: { r: 4, c: 0 } },
+      { s: { r: 3, c: 1 }, e: { r: 3, c: 2 } },
+      { s: { r: 3, c: 3 }, e: { r: 3, c: 4 } },
+      { s: { r: 3, c: 5 }, e: { r: 3, c: 6 } },
+      { s: { r: 3, c: 7 }, e: { r: 3, c: 8 } },
+      { s: { r: 3, c: 9 }, e: { r: 3, c: 10 } },
+      { s: { r: 3, c: 11 }, e: { r: 3, c: 12 } },
+      { s: { r: 3, c: 13 }, e: { r: 3, c: 14 } },
+      { s: { r: 3, c: 15 }, e: { r: 4, c: 15 } }
     ];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Rekap Bulanan");
-    XLSX.writeFile(wb, `Rekap_Bulanan_KC_Pekanbaru_${periode}.xlsx`);
+    XLSX.writeFile(wb, `Rekap_Bulanan_KC_Pekanbaru_${periodeText.replace(/\s+/g, "_")}.xlsx`);
   };
 
   const handleExportPDF = () => {
@@ -352,103 +376,137 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
       return;
     }
 
-    const printWindow = window.open("", "_blank", "width=1100,height=800");
-    if (!printWindow) {
-      alert("Pop-up diblokir oleh browser. Izinkan pop-up untuk mengunduh PDF.");
-      return;
-    }
+    const periodeText = formatPeriodeMonthYearUpper(periode);
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 
-    let rowsHtml = dataPegawai.map((row) => `
-      <tr>
-        <td style="text-align: left; font-weight: bold;">${row.nama || ''}</td>
-        <td>${row.rbNoa || 0}</td><td style="text-align: right;">${row.rbNom || '0'}</td>
-        <td>${row.maxiNoa || 0}</td><td style="text-align: right;">${row.maxiNom || '0'}</td>
-        <td>${row.abatanaNoa || 0}</td><td style="text-align: right;">${row.abatanaNom || '0'}</td>
-        <td>${row.emasNoa || 0}</td><td style="text-align: right;">${row.emasGram || '0,00'}</td>
-        <td>${row.hajiNoa || 0}</td><td style="text-align: right;">${row.hajiNom || '0'}</td>
-        <td>${row.pembiayaanNoa || 0}</td><td style="text-align: right;">${row.pembiayaanNom || '0'}</td>
-        <td>${row.cilemNoa || 0}</td><td style="text-align: right;">${row.cilemGram || '0,00'}</td>
-        <td style="font-weight: bold;">${row.qrisNoa || 0}</td>
-      </tr>
-    `).join("");
+    // Header Title
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 160, 160); // #00a0a0 BSI Teal
+    doc.text("LAPORAN REKAP MONITORING BULANAN", 14, 12);
 
-    const totalHtml = `
-      <tr style="background-color: #f1f5f9; font-weight: bold;">
-        <td style="text-align: left;">TOTAL</td>
-        <td>${totalRow.rbNoa || 0}</td><td style="text-align: right;">${totalRow.rbNom || '0'}</td>
-        <td>${totalRow.maxiNoa || 0}</td><td style="text-align: right;">${totalRow.maxiNom || '0'}</td>
-        <td>${totalRow.abatanaNoa || 0}</td><td style="text-align: right;">${totalRow.abatanaNom || '0'}</td>
-        <td>${totalRow.emasNoa || 0}</td><td style="text-align: right;">${totalRow.emasGram || '0,00'}</td>
-        <td>${totalRow.hajiNoa || 0}</td><td style="text-align: right;">${totalRow.hajiNom || '0'}</td>
-        <td>${totalRow.pembiayaanNoa || 0}</td><td style="text-align: right;">${totalRow.pembiayaanNom || '0'}</td>
-        <td>${totalRow.cilemNoa || 0}</td><td style="text-align: right;">${totalRow.cilemGram || '0,00'}</td>
-        <td style="font-weight: bold;">${totalRow.qrisNoa || 0}</td>
-      </tr>
-    `;
+    doc.setFontSize(8.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(100, 116, 139); // Slate-500
+    doc.text(`KANTOR CABANG: KC PEKANBARU SUDIRMAN 1   |   PERIODE: ${periodeText}`, 14, 17);
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Rekap_Bulanan_KC_Pekanbaru_${periode}.pdf</title>
-        <style>
-          @page { size: A4 landscape; margin: 15mm; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10px; color: #1e293b; margin: 0; padding: 20px; }
-          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #00a0a0; padding-bottom: 10px; }
-          .header h1 { font-size: 16px; margin: 0; color: #00a0a0; text-transform: uppercase; }
-          .header p { font-size: 11px; margin: 4px 0 0 0; color: #64748b; font-weight: 600; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: center; }
-          th { background-color: #00a0a0; color: white; font-weight: bold; text-transform: uppercase; font-size: 9px; }
-          .sub-th { background-color: #e6f5f5; color: #008888; font-weight: bold; }
-          .footer-note { margin-top: 20px; font-size: 9px; color: #94a3b8; text-align: right; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>LAPORAN REKAP MONITORING PROGRAM BULANAN</h1>
-          <p>KANTOR CABANG: KC PEKANBARU SUDIRMAN 1 | PERIODE: ${periode}</p>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th rowspan="2" style="text-align: left;">NAMA REFERRAL</th>
-              <th colspan="2">RB</th>
-              <th colspan="2">MAXI</th>
-              <th colspan="2">ABATANA</th>
-              <th colspan="2">TAB EMAS</th>
-              <th colspan="2">TAB HAJI</th>
-              <th colspan="2">PEMBIAYAAN</th>
-              <th colspan="2">CILEM</th>
-              <th>QRIS</th>
-            </tr>
-            <tr class="sub-th">
-              <th>NOA</th><th>NOMINAL</th>
-              <th>NOA</th><th>NOMINAL</th>
-              <th>NOA</th><th>NOMINAL</th>
-              <th>NOA</th><th>GRAM</th>
-              <th>NOA</th><th>NOMINAL</th>
-              <th>NOA</th><th>NOMINAL</th>
-              <th>NOA</th><th>GRAM</th>
-              <th>NOA</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-            ${totalHtml}
-          </tbody>
-        </table>
-        <div class="footer-note">Dicetak otomatis dari Dashboard Monitoring BSI - ${new Date().toLocaleDateString('id-ID')}</div>
-        <script>
-          window.onload = function() {
-            window.print();
-            setTimeout(function() { window.close(); }, 500);
-          };
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+    // Multi-level Header (2 rows)
+    const head = [
+      [
+        { content: "NAMA REFERRAL", rowSpan: 2, styles: { halign: "left", valign: "middle" } },
+        { content: "RB", colSpan: 2, styles: { halign: "center" } },
+        { content: "MAXI", colSpan: 2, styles: { halign: "center" } },
+        { content: "ABATANA", colSpan: 2, styles: { halign: "center" } },
+        { content: "TAB EMAS", colSpan: 2, styles: { halign: "center" } },
+        { content: "TAB HAJI", colSpan: 2, styles: { halign: "center" } },
+        { content: "PEMBIAYAAN", colSpan: 2, styles: { halign: "center" } },
+        { content: "CILEM", colSpan: 2, styles: { halign: "center" } },
+        { content: "QRIS", rowSpan: 2, styles: { halign: "center", valign: "middle" } }
+      ],
+      [
+        { content: "NOA", styles: { halign: "center" } },
+        { content: "NOMINAL", styles: { halign: "right" } },
+        { content: "NOA", styles: { halign: "center" } },
+        { content: "NOMINAL", styles: { halign: "right" } },
+        { content: "NOA", styles: { halign: "center" } },
+        { content: "NOMINAL", styles: { halign: "right" } },
+        { content: "NOA", styles: { halign: "center" } },
+        { content: "GRAM", styles: { halign: "right" } },
+        { content: "NOA", styles: { halign: "center" } },
+        { content: "NOMINAL", styles: { halign: "right" } },
+        { content: "NOA", styles: { halign: "center" } },
+        { content: "NOMINAL", styles: { halign: "right" } },
+        { content: "NOA", styles: { halign: "center" } },
+        { content: "GRAM", styles: { halign: "right" } }
+      ]
+    ];
+
+    // Table rows
+    const body = dataPegawai.map((row) => [
+      row.nama || "",
+      row.rbNoa || 0,
+      row.rbNom || "0",
+      row.maxiNoa || 0,
+      row.maxiNom || "0",
+      row.abatanaNoa || 0,
+      row.abatanaNom || "0",
+      row.emasNoa || 0,
+      row.emasGram || "0,00",
+      row.hajiNoa || 0,
+      row.hajiNom || "0",
+      row.pembiayaanNoa || 0,
+      row.pembiayaanNom || "0",
+      row.cilemNoa || 0,
+      row.cilemGram || "0,00",
+      row.qrisNoa || 0
+    ]);
+
+    // Add TOTAL row
+    body.push([
+      "TOTAL",
+      totalRow.rbNoa || 0,
+      totalRow.rbNom || "0",
+      totalRow.maxiNoa || 0,
+      totalRow.maxiNom || "0",
+      totalRow.abatanaNoa || 0,
+      totalRow.abatanaNom || "0",
+      totalRow.emasNoa || 0,
+      totalRow.emasGram || "0,00",
+      totalRow.hajiNoa || 0,
+      totalRow.hajiNom || "0",
+      totalRow.pembiayaanNoa || 0,
+      totalRow.pembiayaanNom || "0",
+      totalRow.cilemNoa || 0,
+      totalRow.cilemGram || "0,00",
+      totalRow.qrisNoa || 0
+    ]);
+
+    autoTable(doc, {
+      startY: 21,
+      head: head,
+      body: body,
+      theme: "grid",
+      styles: {
+        fontSize: 6.5,
+        cellPadding: 1.2,
+        textColor: [30, 41, 59],
+        lineColor: [203, 213, 225],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [0, 160, 160],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 7
+      },
+      columnStyles: {
+        0: { halign: "left", fontStyle: "bold" },
+        1: { halign: "center" },
+        2: { halign: "right" },
+        3: { halign: "center" },
+        4: { halign: "right" },
+        5: { halign: "center" },
+        6: { halign: "right" },
+        7: { halign: "center" },
+        8: { halign: "right" },
+        9: { halign: "center" },
+        10: { halign: "right" },
+        11: { halign: "center" },
+        12: { halign: "right" },
+        13: { halign: "center" },
+        14: { halign: "right" },
+        15: { halign: "center", fontStyle: "bold" }
+      },
+      didParseCell: function (data) {
+        if (data.section === "body" && data.row.index === body.length - 1) {
+          data.cell.styles.fillColor = [241, 245, 249];
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.textColor = [15, 23, 42];
+        }
+      }
+    });
+
+    doc.save(`Rekap_Bulanan_KC_Pekanbaru_${periodeText.replace(/\s+/g, "_")}.pdf`);
   };
 
   return (

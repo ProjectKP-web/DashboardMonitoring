@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Loader2, AlertCircle, Info, ArrowRight } from "lucide-react";
 
@@ -153,14 +153,11 @@ export default function Login() {
           />
         </div>
 
-        <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center text-xs">
           <label className="flex items-center text-slate-600 cursor-pointer">
             <input type="checkbox" className="mr-1.5 rounded-sm text-[#00a0a0]" />
             Ingat saya
           </label>
-          <Link to="/forgot" className="text-[#00a0a0] font-semibold hover:underline">
-            Lupa Kata Sandi?
-          </Link>
         </div>
 
         <button
@@ -177,13 +174,6 @@ export default function Login() {
             "Masuk Sekarang"
           )}
         </button>
-
-        <div className="text-center pt-3 text-xs text-slate-600 border-t border-slate-100">
-          Belum memiliki akun?{" "}
-          <Link to="/register" className="text-[#00a0a0] font-bold hover:underline">
-            Daftar Akun Pegawai
-          </Link>
-        </div>
       </form>
     </div>
   );

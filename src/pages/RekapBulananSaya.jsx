@@ -120,10 +120,14 @@ export default function RekapBulananSaya() {
       }
 
       // 3. Fetch transactions
-      const { data: txs } = await supabase
+      const { data: txs, error: txErr } = await supabase
         .from("transactions")
-        .select("*, products(id, name, measurement_type), pegawai(id, nama)")
+        .select("*, products(id, name, measurement_type)")
         .order("transaction_date", { ascending: false });
+
+      if (txErr) {
+        console.error("Error fetching transactions in RekapBulananSaya:", txErr);
+      }
 
       const filteredTxs = (txs || []).filter((item) => {
         const itemDate = item.transaction_date || "";
@@ -214,6 +218,21 @@ export default function RekapBulananSaya() {
   useEffect(() => {
     if (isSupabaseConfigured) {
       fetchRecapData();
+
+      const channel = supabase
+        .channel("realtime-rekap-bulanan-saya")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "transactions" },
+          () => {
+            fetchRecapData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     } else {
       // Offline fallback with mock employee list sorted A-Z
       const offlineList = defaultPegawai.map((emp) => ({
@@ -485,8 +504,8 @@ export default function RekapBulananSaya() {
                             {stats.gram > 0 ? `${Number(stats.gram).toFixed(2).replace(".", ",")} Gram` : "-"}
                           </div>
                         ) : (
-                          <div className="font-extrabold text-purple-700 text-[11px]">
-                            {stats.noa > 0 ? `${stats.noa} Account` : "-"}
+                          <div className="font-extrabold text-slate-400 text-[11px]">
+                            -
                           </div>
                         )}
                       </div>
@@ -531,7 +550,7 @@ export default function RekapBulananSaya() {
                               {tx.unit === "gram" ? (
                                 <span className="text-amber-700">{tx.gram} Gram</span>
                               ) : tx.unit === "noa" ? (
-                                <span className="text-purple-700">{tx.noa} Account</span>
+                                <span className="text-slate-400">-</span>
                               ) : (
                                 <span className="text-emerald-700">Rp {tx.nominal}</span>
                               )}

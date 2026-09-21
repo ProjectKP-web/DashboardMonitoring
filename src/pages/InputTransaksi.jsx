@@ -58,7 +58,8 @@ export default function InputTransaksi() {
   const { user, profile } = useAuth();
   const { role } = useRole();
 
-  const isKabag = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag";
+  const userRole = profile?.role || role;
+  const isKabag = userRole === "kabag" || userRole === "kepala_bagian" || userRole === "kepala" || userRole === "admin" || userRole === "inputer";
   const currentUserId = user?.id || profile?.id;
 
   // Form State
@@ -161,13 +162,20 @@ export default function InputTransaksi() {
     try {
       let query = supabase
         .from("transactions")
-        .select("*, products(id, name, measurement_type), pegawai(id, nama)")
+        .select("*, products(id, name, measurement_type)")
         .order("created_at", { ascending: false });
 
-      if (currentUserId && currentUserId !== "demo-user-id") {
-        query = query.eq("user_id", currentUserId);
+      const isValidUUID = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      let targetUserId = user?.id;
+      if (!isValidUUID(targetUserId)) {
+        targetUserId = profile?.id;
+      }
+
+      if (isValidUUID(targetUserId)) {
+        query = query.eq("user_id", targetUserId);
       } else {
-        query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
+        query = query.eq("user_id", "0c8cf587-370b-4ccb-969e-244685919156");
       }
 
       const { data, error } = await query;
@@ -175,6 +183,13 @@ export default function InputTransaksi() {
       if (error) {
         console.error("Error fetching transactions from Supabase:", error);
       } else if (data) {
+        const { data: dbPegawai } = await supabase.from("pegawai").select("*");
+        const activePegawai = dbPegawai && dbPegawai.length > 0 ? dbPegawai : daftarPegawai;
+        const pegawaiMap = {};
+        (activePegawai || []).forEach((p) => {
+          if (p.id) pegawaiMap[String(p.id)] = (p.nama || "").toUpperCase();
+        });
+
         const formatted = data.map((item) => {
           const prodInfo = item.products || {};
           const prodCode = prodInfo.name || "RB";
@@ -182,8 +197,7 @@ export default function InputTransaksi() {
             (p) => p.code.toUpperCase() === prodCode.toUpperCase() || p.id === item.product_id
           );
 
-          const empObj = item.pegawai || (daftarPegawai || []).find((p) => String(p.id) === String(item.pegawai_id));
-          const pegawaiNama = empObj?.nama ? empObj.nama.toUpperCase() : "-";
+          const pegawaiNama = pegawaiMap[String(item.pegawai_id)] || (activePegawai.find((p) => String(p.id) === String(item.pegawai_id))?.nama || "").toUpperCase() || "-";
 
           return {
             id: item.id,
@@ -278,7 +292,8 @@ export default function InputTransaksi() {
     const isNominalUnit = prodInfo?.unit === "nominal";
 
     const dbDate = formatDateForDB(tanggal);
-    const numNominal = isNominalUnit && nominal ? parseFloat(nominal) : null;
+    const rawNomStr = nominal ? nominal.toString().replace(/\./g, "") : "";
+    const numNominal = isNominalUnit && rawNomStr ? parseFloat(rawNomStr) : null;
     const numGram = isGramUnit && gram ? parseFloat(gram) : null;
 
     // Helper to validate UUID format
@@ -560,11 +575,19 @@ export default function InputTransaksi() {
                 Nominal (Rp) {selectedProductObj?.unit === "nominal" && <span className="text-rose-500">*</span>}
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={nominal}
-                onChange={(e) => setNominal(e.target.value)}
+                onChange={(e) => {
+                  const rawVal = e.target.value.replace(/[^0-9]/g, "");
+                  if (!rawVal) {
+                    setNominal("");
+                  } else {
+                    setNominal(Number(rawVal).toLocaleString("id-ID"));
+                  }
+                }}
                 disabled={selectedProductObj?.unit !== "nominal"}
-                placeholder={selectedProductObj?.unit === "nominal" ? "20.000.000" : "Hanya untuk produk Rupiah"}
+                placeholder={selectedProductObj?.unit === "nominal" ? "Contoh: 20.000.000" : "Hanya untuk produk Rupiah"}
                 className={`w-full px-3.5 py-2.5 border rounded-xl font-bold ${
                   selectedProductObj?.unit === "nominal"
                     ? "bg-white border-slate-300 text-slate-900 focus:ring-2 focus:ring-[#00a0a0]"
@@ -709,7 +732,7 @@ export default function InputTransaksi() {
                 <th className="py-3 px-3 text-right min-w-[110px]">Nominal (Rp)</th>
                 <th className="py-3 px-3 text-right min-w-[80px]">Gram</th>
                 <th className="py-3 px-3 min-w-[110px]">Status</th>
-                <th className="py-3 px-3 min-w-[80px]">Aksi</th>
+                {isKabag && <th className="py-3 px-3 min-w-[80px]">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -728,35 +751,37 @@ export default function InputTransaksi() {
                     <td className="py-3 px-3">
                       <StatusBadge status={row.status} />
                     </td>
-                    <td className="py-3 px-3">
-                      <div className="flex items-center justify-center space-x-2">
-                        <button
-                          onClick={() => {
-                            setItemToEdit(row);
-                            setEditModalOpen(true);
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-[#009688] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setItemToDelete(row);
-                            setDeleteModalOpen(true);
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
+                    {isKabag && (
+                      <td className="py-3 px-3">
+                        <div className="flex items-center justify-center space-x-2">
+                          <button
+                            onClick={() => {
+                              setItemToEdit(row);
+                              setEditModalOpen(true);
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-[#009688] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setItemToDelete(row);
+                              setDeleteModalOpen(true);
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="py-8 text-center text-slate-400 font-medium">
+                  <td colSpan={isKabag ? 9 : 8} className="py-8 text-center text-slate-400 font-medium">
                     Tidak ada data produk yang ditemukan.
                   </td>
                 </tr>

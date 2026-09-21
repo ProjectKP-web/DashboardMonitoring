@@ -28,33 +28,70 @@ export function AuthProvider({ children }) {
     // Only run idle timer if user is logged in
     if (!user && !profile && !isDemoMode) return;
 
-    let timer;
+    // Initialize last activity timestamp if not set
+    if (!localStorage.getItem("bsi_last_activity")) {
+      localStorage.setItem("bsi_last_activity", Date.now().toString());
+    }
+
+    let isLoggingOut = false;
 
     const performAutoLogout = async () => {
+      if (isLoggingOut) return;
+      isLoggingOut = true;
       console.warn("🔒 Auto logout triggered due to inactivity (15 mins idle)");
       await signOut();
       setIdleExpired(true);
     };
 
-    const resetTimer = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(performAutoLogout, IDLE_TIMEOUT_MS);
+    const checkInactivity = () => {
+      const lastActivity = parseInt(localStorage.getItem("bsi_last_activity") || "0", 10);
+      if (lastActivity > 0 && Date.now() - lastActivity >= IDLE_TIMEOUT_MS) {
+        performAutoLogout();
+      }
     };
 
-    // Events to track user activity
-    const activityEvents = ["mousemove", "keydown", "click", "scroll", "touchstart", "wheel"];
+    let lastUpdate = 0;
+    const updateActivity = () => {
+      const now = Date.now();
+      // Throttle localStorage updates to at most once per 2 seconds
+      if (now - lastUpdate > 2000) {
+        lastUpdate = now;
+        localStorage.setItem("bsi_last_activity", now.toString());
+      }
+    };
+
+    const handleUserActivity = () => {
+      const lastActivity = parseInt(localStorage.getItem("bsi_last_activity") || "0", 10);
+      if (lastActivity > 0 && Date.now() - lastActivity >= IDLE_TIMEOUT_MS) {
+        performAutoLogout();
+        return;
+      }
+      updateActivity();
+    };
+
+    // Events to track active user interactions
+    const activityEvents = ["click", "keydown", "scroll", "touchstart", "mousemove", "wheel"];
 
     activityEvents.forEach((evt) => {
-      window.addEventListener(evt, resetTimer, { passive: true });
+      window.addEventListener(evt, handleUserActivity, { passive: true });
     });
 
-    // Start timer on initial mount/login
-    resetTimer();
+    // Check on tab focus and visibility change immediately
+    window.addEventListener("focus", checkInactivity);
+    document.addEventListener("visibilitychange", checkInactivity);
+
+    // Periodic background check every 5 seconds
+    const interval = setInterval(checkInactivity, 5000);
+
+    // Initial check on mount
+    checkInactivity();
 
     return () => {
-      if (timer) clearTimeout(timer);
+      clearInterval(interval);
+      window.removeEventListener("focus", checkInactivity);
+      document.removeEventListener("visibilitychange", checkInactivity);
       activityEvents.forEach((evt) => {
-        window.removeEventListener(evt, resetTimer);
+        window.removeEventListener(evt, handleUserActivity);
       });
     };
   }, [user, profile, isDemoMode]);
@@ -177,6 +214,7 @@ export function AuthProvider({ children }) {
   const loginAsDemo = (userRole = "pegawai", name = "Pegawai BSI", nip = "123456789") => {
     setIsDemoMode(true);
     sessionStorage.setItem("bsi_demo_mode", "true");
+    localStorage.setItem("bsi_last_activity", Date.now().toString());
     const demoProf = {
       id: "demo-user-id",
       full_name: name,
@@ -192,70 +230,6 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem("bsi_demo_user", JSON.stringify(demoUser));
     sessionStorage.setItem("bsi_demo_profile", JSON.stringify(demoProf));
     return demoProf;
-  };
-
-  // Register Akun Pegawai Baru
-  const signUp = async ({ email, password, full_name, employee_id, nip }) => {
-    const nipVal = nip || employee_id;
-
-    if (!isSupabaseConfigured) {
-      return loginAsDemo("pegawai", full_name, nipVal);
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name,
-            nip: nipVal,
-            employee_id: nipVal,
-            role: "pegawai",
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      // Direct insert profile into profiles table
-      if (data.user) {
-        const profileData = {
-          id: data.user.id,
-          full_name,
-          email,
-          NIP: nipVal,
-          role: "pegawai",
-          password: password,
-        };
-
-        const { error: profileErr } = await supabase
-          .from("profiles")
-          .insert([profileData]);
-
-        if (profileErr) {
-          console.warn("Retrying profile insert with lowercase nip:", profileErr.message);
-          const fallbackProfileData = {
-            id: data.user.id,
-            full_name,
-            email,
-            nip: nipVal,
-            role: "pegawai",
-            password: password,
-          };
-          await supabase.from("profiles").insert([fallbackProfileData]);
-        }
-      }
-
-      return data;
-    } catch (err) {
-      if (err.message === "Failed to fetch" || err.name === "TypeError") {
-        throw new Error(
-          "NETWORK_ERROR: Domain Supabase (VITE_SUPABASE_URL) di file .env tidak ditemukan/valid di internet. Silakan periksa kembali VITE_SUPABASE_URL Anda di Supabase Settings > API."
-        );
-      }
-      throw err;
-    }
   };
 
   // Login (Support Login dengan Email atau NIP)
@@ -349,6 +323,7 @@ export function AuthProvider({ children }) {
 
               if (retrySignIn.data?.user) {
                 const userProf = await fetchUserProfile(retrySignIn.data.user.id, retrySignIn.data.user.email);
+                localStorage.setItem("bsi_last_activity", Date.now().toString());
                 return { user: retrySignIn.data.user, profile: userProf };
               }
             }
@@ -363,6 +338,7 @@ export function AuthProvider({ children }) {
         userProf = await fetchUserProfile(data.user.id, data.user.email);
       }
 
+      localStorage.setItem("bsi_last_activity", Date.now().toString());
       return { user: data.user, profile: userProf };
     } catch (err) {
       if (err.message === "Failed to fetch" || err.name === "TypeError") {
@@ -374,61 +350,12 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Reset / Lupa Kata Sandi
-  const resetPassword = async (identifier) => {
-    if (!isSupabaseConfigured) {
-      return true;
-    }
-
-    let targetEmail = identifier.trim();
-
-    try {
-      if (!targetEmail.includes("@")) {
-        const { data: profileByNip } = await supabase
-          .from("profiles")
-          .select("email")
-          .or(`nip.eq.${targetEmail},employee_id.eq.${targetEmail}`)
-          .maybeSingle();
-
-        if (profileByNip?.email) {
-          targetEmail = profileByNip.email;
-        } else {
-          const { data: userByNip } = await supabase
-            .from("users")
-            .select("email")
-            .or(`nip.eq.${targetEmail},employee_id.eq.${targetEmail}`)
-            .maybeSingle();
-
-          if (userByNip?.email) {
-            targetEmail = userByNip.email;
-          }
-        }
-      }
-
-      const { data, error } = await supabase.auth.resetPasswordForEmail(
-        targetEmail,
-        {
-          redirectTo: `${window.location.origin}/login`,
-        }
-      );
-
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      if (err.message === "Failed to fetch" || err.name === "TypeError") {
-        throw new Error(
-          "NETWORK_ERROR: Domain Supabase (VITE_SUPABASE_URL) di file .env tidak terhubung."
-        );
-      }
-      throw err;
-    }
-  };
-
   // Sign Out
   const signOut = async () => {
     sessionStorage.removeItem("bsi_demo_mode");
     sessionStorage.removeItem("bsi_demo_user");
     sessionStorage.removeItem("bsi_demo_profile");
+    localStorage.removeItem("bsi_last_activity");
     if (isSupabaseConfigured && !isDemoMode) {
       try {
         await supabase.auth.signOut();
@@ -449,9 +376,7 @@ export function AuthProvider({ children }) {
         profile,
         session,
         loading,
-        signUp,
         signIn,
-        resetPassword,
         signOut,
         loginAsDemo,
         isDemoMode,

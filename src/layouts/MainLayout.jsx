@@ -27,8 +27,6 @@ export default function MainLayout() {
         return "Master Data Produk";
       case "/profil-saya":
         return "Profil Saya";
-      case "/ubah-password":
-        return "Ubah Password";
       default:
         return "Dashboard Monitoring";
     }

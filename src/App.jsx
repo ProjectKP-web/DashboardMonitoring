@@ -84,8 +84,6 @@ function App() {
   const Produk = lazy(() => import("./pages/Produk"));
 
   // Error pages
-  const Guest = lazy(() => import("./pages/Guest"));
-  const Member = lazy(() => import("./pages/Member"));
   const NotFound = lazy(() => import("./pages/NotFound"));
   const Error400 = lazy(() => import("./pages/Error400"));
   const Error401 = lazy(() => import("./pages/Error401"));
@@ -97,8 +95,6 @@ function App() {
 
   // Auth pages
   const Login = lazy(() => import("./pages/auth/Login"));
-  const Register = lazy(() => import("./pages/auth/Register"));
-  const Forgot = lazy(() => import("./pages/auth/Forgot"));
 
   return (
     <RoleProvider>
@@ -107,8 +103,6 @@ function App() {
           <Routes>
             {/* Default root entry route */}
             <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/guest" element={<Guest />} />
-            <Route path="/member" element={<Member />} />
 
             {/* Protected Main Dashboard Layout */}
             <Route
@@ -149,8 +143,6 @@ function App() {
               }
             >
               <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/forgot" element={<Forgot />} />
             </Route>
           </Routes>
         </Suspense>
