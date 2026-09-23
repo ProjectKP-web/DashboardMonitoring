@@ -93,12 +93,28 @@ export default function RekapBulananSaya() {
   const [rekapPegawaiList, setRekapPegawaiList] = useState([]);
 
   const fetchRecapData = async () => {
+    const saved = localStorage.getItem("bsi_custom_products");
+    let currentMaster = defaultMasterProducts;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          currentMaster = parsed.map((p) => ({
+            id: p.id,
+            code: p.kode || p.code || p.name,
+            name: p.name || p.nama || p.kode,
+            unit: p.measurement_type || "nominal"
+          }));
+          setMasterProducts(currentMaster);
+        }
+      } catch (e) {}
+    }
+
     if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
       // 1. Fetch products
       const { data: dbProds } = await supabase.from("products").select("*").order("id", { ascending: true });
-      let currentMaster = defaultMasterProducts;
       if (dbProds && dbProds.length > 0) {
         currentMaster = dbProds.map((p) => ({
           id: p.id,

@@ -89,14 +89,14 @@ export default function InputTransaksi() {
 
   // Default Master Product Dictionary including QRIS
   const defaultDaftarProduk = [
-    { id: 1, code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
-    { id: 2, code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
-    { id: 3, code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
-    { id: 4, code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
-    { id: 5, code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
-    { id: 6, code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
-    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" },
-    { id: 8, code: "QRIS", name: "QRIS - Merchant QRIS BSI", unit: "noa" }
+    { id: 1, code: "RB", name: "RB", unit: "nominal" },
+    { id: 2, code: "MAXI", name: "MAXI", unit: "nominal" },
+    { id: 3, code: "ABATANA", name: "ABATANA", unit: "nominal" },
+    { id: 4, code: "TAB EMAS", name: "TAB EMAS", unit: "gram" },
+    { id: 5, code: "TAB HAJI", name: "TAB HAJI", unit: "nominal" },
+    { id: 6, code: "PEMBIAYAAN", name: "PEMBIAYAAN", unit: "nominal" },
+    { id: 7, code: "CILEM", name: "CILEM", unit: "gram" },
+    { id: 8, code: "QRIS", name: "QRIS", unit: "noa" }
   ];
 
   const [daftarProduk, setDaftarProduk] = useState(defaultDaftarProduk);
@@ -135,16 +135,42 @@ export default function InputTransaksi() {
   };
 
   const fetchProductsFromDB = async () => {
+    const saved = localStorage.getItem("bsi_custom_products");
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const formatted = parsed.map((p) => {
+            const code = (p.kode || p.code || p.name || "").toUpperCase();
+            return {
+              id: p.id,
+              code: code,
+              name: code,
+              unit: p.measurement_type || "nominal"
+            };
+          });
+          setDaftarProduk(formatted);
+        }
+      } catch (e) {
+        console.warn("Error parsing local custom products in InputTransaksi:", e);
+      }
+    }
+
     if (!isSupabaseConfigured) return;
+
     try {
       const { data, error } = await supabase.from("products").select("*").order("id", { ascending: true });
       if (!error && data && data.length > 0) {
-        const formatted = data.map((p) => ({
-          id: p.id,
-          code: p.name,
-          name: p.name === "QRIS" ? "QRIS - Merchant QRIS BSI" : p.name,
-          unit: p.measurement_type || "nominal"
-        }));
+        const formatted = data.map((p) => {
+          const code = (p.name || "").toUpperCase();
+          return {
+            id: p.id,
+            code: code,
+            name: code,
+            unit: p.measurement_type || "nominal"
+          };
+        });
         setDaftarProduk(formatted);
       }
     } catch (e) {
@@ -228,9 +254,9 @@ export default function InputTransaksi() {
   };
 
   useEffect(() => {
+    fetchProductsFromDB();
     if (isSupabaseConfigured) {
       fetchPegawaiFromDB();
-      fetchProductsFromDB();
       fetchTransactions();
     } else {
       setRiwayat([
@@ -262,6 +288,18 @@ export default function InputTransaksi() {
         }
       ]);
     }
+
+    const handleProductsUpdated = () => {
+      fetchProductsFromDB();
+    };
+
+    window.addEventListener("bsi_products_updated", handleProductsUpdated);
+    window.addEventListener("storage", handleProductsUpdated);
+
+    return () => {
+      window.removeEventListener("bsi_products_updated", handleProductsUpdated);
+      window.removeEventListener("storage", handleProductsUpdated);
+    };
   }, [user, profile, role]);
 
   const selectedProductObj = daftarProduk.find((p) => p.code === produk);

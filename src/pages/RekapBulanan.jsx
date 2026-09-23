@@ -8,9 +8,11 @@ import {
   Banknote,
   Coins,
   Info,
-  Loader2
+  Loader2,
+  Package
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -35,7 +37,10 @@ const formatPeriodeMonthYearUpper = (periodeStr) => {
   return `${mName} ${y}`;
 };
 
-export default function RekapBulanan({ showChart = false, showKpi = false }) {
+export default function RekapBulanan({ showChart = false, showKpi = false, isPegawaiView = false }) {
+  const { user, profile } = useAuth();
+  const currentUserId = user?.id || profile?.id;
+
   const [periode, setPeriode] = useState(getCurrentPeriode);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,10 +60,11 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
   const [masterProducts, setMasterProducts] = useState(defaultMasterProducts);
 
   const [kpi, setKpi] = useState({
-    totalPegawai: 14,
-    totalNoa: 185,
-    totalNominal: 1248500000,
-    totalGram: 236.5
+    totalPegawai: 0,
+    totalProduk: 0,
+    totalNoa: 0,
+    totalNominal: 0,
+    totalGram: 0
   });
 
   const [dataPegawai, setDataPegawai] = useState([]);
@@ -86,11 +92,36 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
   });
 
   const fetchMonthlyRecap = async () => {
-    if (!isSupabaseConfigured) return;
+    const saved = localStorage.getItem("bsi_custom_products");
+    let currentMaster = defaultMasterProducts;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          currentMaster = parsed.map((p) => ({
+            id: p.id,
+            code: p.kode || p.code || p.name,
+            name: p.name || p.nama || p.kode,
+            unit: p.measurement_type || "nominal"
+          }));
+          setMasterProducts(currentMaster);
+        }
+      } catch (e) {}
+    }
+
+    if (!isSupabaseConfigured) {
+      setKpi({
+        totalPegawai: 14,
+        totalProduk: 42,
+        totalNoa: isPegawaiView ? 11 : 185,
+        totalNominal: isPegawaiView ? 75000000 : 1248500000,
+        totalGram: isPegawaiView ? 30 : 236.5
+      });
+      return;
+    }
     setLoading(true);
     try {
       const { data: dbProds } = await supabase.from("products").select("*").order("id", { ascending: true });
-      let currentMaster = defaultMasterProducts;
       if (dbProds && dbProds.length > 0) {
         currentMaster = dbProds.map((p) => ({
           id: p.id,
@@ -102,7 +133,9 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
       }
 
       const { data: dbPegawai } = await supabase.from("pegawai").select("*").order("nama", { ascending: true });
-      const { data: txs } = await supabase.from("transactions").select("*, products(id, name, measurement_type)");
+      let txQuery = supabase.from("transactions").select("*, products(id, name, measurement_type)");
+
+      const { data: txs } = await txQuery;
       setAllTransactions(txs || []);
 
       const filteredTxs = (txs || []).filter((item) => {
@@ -237,6 +270,7 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
 
       setKpi({
         totalPegawai: employeeList.length,
+        totalProduk: filteredTxs.length,
         totalNoa: grandNoa,
         totalNominal: grandNominal,
         totalGram: grandGram
@@ -551,17 +585,25 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
       {/* KPI Cards Row (Rendered when showKpi is true) */}
       {showKpi && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: TOTAL PEGAWAI AKTIF */}
+          {/* Card 1: TOTAL PEGAWAI AKTIF / TOTAL PRODUK */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
             <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
-              <Users className="w-6 h-6" />
+              {isPegawaiView ? <Package className="w-6 h-6" /> : <Users className="w-6 h-6" />}
             </div>
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                TOTAL PEGAWAI AKTIF
+                {isPegawaiView ? "TOTAL PRODUK" : "TOTAL PEGAWAI AKTIF"}
               </div>
-              <div className="text-2xl font-extrabold text-slate-800">{kpi.totalPegawai}</div>
-              <div className="text-xs font-semibold text-[#00a0a0]">Pegawai</div>
+              {loading ? (
+                <div className="h-7 w-16 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+              ) : (
+                <div className="text-2xl font-extrabold text-slate-800">
+                  {isPegawaiView ? kpi.totalProduk : kpi.totalPegawai}
+                </div>
+              )}
+              <div className="text-xs font-semibold text-[#00a0a0]">
+                {isPegawaiView ? "Produk" : "Pegawai"}
+              </div>
             </div>
           </div>
 
@@ -574,7 +616,11 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 TOTAL NOA
               </div>
-              <div className="text-2xl font-extrabold text-slate-800">{kpi.totalNoa}</div>
+              {loading ? (
+                <div className="h-7 w-16 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+              ) : (
+                <div className="text-2xl font-extrabold text-slate-800">{kpi.totalNoa}</div>
+              )}
               <div className="text-xs font-semibold text-slate-500">NOA</div>
             </div>
           </div>
@@ -588,9 +634,13 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 TOTAL NOMINAL
               </div>
-              <div className="text-xl font-extrabold text-slate-800">
-                Rp {Number(kpi.totalNominal).toLocaleString("id-ID")}
-              </div>
+              {loading ? (
+                <div className="h-7 w-32 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+              ) : (
+                <div className="text-xl font-extrabold text-slate-800">
+                  Rp {Number(kpi.totalNominal).toLocaleString("id-ID")}
+                </div>
+              )}
               <div className="text-xs font-semibold text-[#00a0a0]">Nominal</div>
             </div>
           </div>
@@ -604,9 +654,13 @@ export default function RekapBulanan({ showChart = false, showKpi = false }) {
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 TOTAL GRAM
               </div>
-              <div className="text-2xl font-extrabold text-slate-800">
-                {Number(kpi.totalGram).toFixed(2).replace(".", ",")}
-              </div>
+              {loading ? (
+                <div className="h-7 w-20 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+              ) : (
+                <div className="text-2xl font-extrabold text-slate-800">
+                  {Number(kpi.totalGram).toFixed(2).replace(".", ",")}
+                </div>
+              )}
               <div className="text-xs font-semibold text-amber-600">Gram</div>
             </div>
           </div>

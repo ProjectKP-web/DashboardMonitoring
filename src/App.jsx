@@ -6,6 +6,33 @@ import { RoleProvider } from "./context/RoleContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useRole } from "./context/RoleContext";
 
+// Lazy-loaded Pegawai Portal Pages
+const DashboardSaya = lazy(() => import("./pages/DashboardSaya"));
+const InputTransaksi = lazy(() => import("./pages/InputTransaksi"));
+const RiwayatTransaksi = lazy(() => import("./pages/RiwayatTransaksi"));
+const RekapBulananSaya = lazy(() => import("./pages/RekapBulananSaya"));
+const ProfilSaya = lazy(() => import("./pages/ProfilSaya"));
+
+// Lazy-loaded Kabag / Overview Pages
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const RekapBulanan = lazy(() => import("./pages/RekapBulanan"));
+const MonitoringHarian = lazy(() => import("./pages/MonitoringHarian"));
+const Pegawai = lazy(() => import("./pages/Pegawai"));
+const Produk = lazy(() => import("./pages/Produk"));
+
+// Lazy-loaded Error pages
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Error400 = lazy(() => import("./pages/Error400"));
+const Error401 = lazy(() => import("./pages/Error401"));
+const Error403 = lazy(() => import("./pages/Error403"));
+
+// Lazy-loaded Layouts
+const MainLayout = lazy(() => import("./layouts/MainLayout"));
+const AuthLayout = lazy(() => import("./layouts/AuthLayout"));
+
+// Lazy-loaded Auth pages
+const Login = lazy(() => import("./pages/auth/Login"));
+
 // Auth Guard component for protected pages
 function ProtectedRoute({ children }) {
   const { user, profile, loading, isDemoMode } = useAuth();
@@ -69,33 +96,6 @@ function PublicRoute({ children }) {
 }
 
 function App() {
-  // Pegawai Portal Pages
-  const DashboardSaya = lazy(() => import("./pages/DashboardSaya"));
-  const InputTransaksi = lazy(() => import("./pages/InputTransaksi"));
-  const RiwayatTransaksi = lazy(() => import("./pages/RiwayatTransaksi"));
-  const RekapBulananSaya = lazy(() => import("./pages/RekapBulananSaya"));
-  const ProfilSaya = lazy(() => import("./pages/ProfilSaya"));
-
-  // Kabag / Overview Pages
-  const Dashboard = lazy(() => import("./pages/Dashboard"));
-  const RekapBulanan = lazy(() => import("./pages/RekapBulanan"));
-  const MonitoringHarian = lazy(() => import("./pages/MonitoringHarian"));
-  const Pegawai = lazy(() => import("./pages/Pegawai"));
-  const Produk = lazy(() => import("./pages/Produk"));
-
-  // Error pages
-  const NotFound = lazy(() => import("./pages/NotFound"));
-  const Error400 = lazy(() => import("./pages/Error400"));
-  const Error401 = lazy(() => import("./pages/Error401"));
-  const Error403 = lazy(() => import("./pages/Error403"));
-
-  // Layouts
-  const MainLayout = lazy(() => import("./layouts/MainLayout"));
-  const AuthLayout = lazy(() => import("./layouts/AuthLayout"));
-
-  // Auth pages
-  const Login = lazy(() => import("./pages/auth/Login"));
-
   return (
     <RoleProvider>
       <AuthProvider>

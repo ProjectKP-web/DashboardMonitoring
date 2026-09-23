@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LayoutDashboard, FileEdit, Hash, Banknote, Scale, CheckCircle2, Loader2 } from "lucide-react";
+import { FileEdit, Banknote, Coins, Package, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -10,7 +10,6 @@ export default function DashboardSaya() {
   const { role } = useRole();
   const [loading, setLoading] = useState(false);
 
-  const isKabag = role === "kabag" || profile?.role === "kepala_bagian" || profile?.role === "kabag";
   const currentUserId = user?.id || profile?.id;
   const userName = profile?.full_name || profile?.name || (user?.email ? user.email.split("@")[0].toUpperCase() : "Pegawai");
 
@@ -35,7 +34,9 @@ export default function DashboardSaya() {
     if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.from("transactions").select("*");
+      let query = supabase.from("transactions").select("*");
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Error fetching dashboard stats:", error);
@@ -47,7 +48,6 @@ export default function DashboardSaya() {
 
         data.forEach((item) => {
           const itemDate = item.transaction_date || "";
-          // Filter strictly for active real-time month
           if (itemDate.startsWith(currentMonthStr)) {
             count += 1;
             noaSum += Number(item.noa) || 0;
@@ -74,7 +74,7 @@ export default function DashboardSaya() {
     if (isSupabaseConfigured) {
       fetchDashboardStats();
 
-      // Realtime Listener: auto-update instantly when Kabag or anyone inputs transactions
+      // Realtime Listener
       const channel = supabase
         .channel("realtime-dashboard-saya")
         .on(
@@ -122,58 +122,82 @@ export default function DashboardSaya() {
         </Link>
       </div>
 
-      {/* Monthly Summary Cards (4 Cards Only) */}
+      {/* Monthly Summary Cards (4 Cards Matched to Kabag Visual Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative">
-        {loading && (
-          <div className="absolute inset-0 bg-white/70 backdrop-blur-xs flex items-center justify-center z-10 rounded-2xl">
-            <div className="flex items-center space-x-2 text-xs font-bold text-[#00a0a0]">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Memuat data dashboard...</span>
+        {/* Card 1: TOTAL PRODUK */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
+            <Package className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              TOTAL PRODUK
             </div>
-          </div>
-        )}
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Total Produk</span>
-            <FileEdit className="w-5 h-5 text-[#00a0a0]" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-800">{stats.totalTransactions}</div>
-          <div className="text-xs font-semibold text-emerald-600 flex items-center space-x-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{stats.totalTransactions} produk bulan {currentMonthName}.</span>
+            {loading ? (
+              <div className="h-7 w-16 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+            ) : (
+              <div className="text-2xl font-extrabold text-slate-800">{stats.totalTransactions}</div>
+            )}
+            <div className="text-xs font-semibold text-[#00a0a0]">Produk</div>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Total NOA</span>
-            <Hash className="w-5 h-5 text-[#f0b43c]" />
+        {/* Card 2: TOTAL NOA */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-full border-2 border-[#f0b43c] bg-amber-50 flex items-center justify-center text-[#f0b43c] shrink-0 font-bold text-xs">
+            NOA
           </div>
-          <div className="text-2xl font-extrabold text-slate-800">{stats.totalNoa}</div>
-          <div className="text-xs font-semibold text-slate-500">Account (NOA)</div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              TOTAL NOA
+            </div>
+            {loading ? (
+              <div className="h-7 w-16 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+            ) : (
+              <div className="text-2xl font-extrabold text-slate-800">{stats.totalNoa}</div>
+            )}
+            <div className="text-xs font-semibold text-slate-500">NOA</div>
+          </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Total Nominal</span>
-            <Banknote className="w-5 h-5 text-[#00a0a0]" />
+        {/* Card 3: TOTAL NOMINAL */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
+            <Banknote className="w-6 h-6" />
           </div>
-          <div className="text-xl font-extrabold text-slate-800">
-            Rp {stats.totalNominal.toLocaleString("id-ID")}
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              TOTAL NOMINAL
+            </div>
+            {loading ? (
+              <div className="h-7 w-32 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+            ) : (
+              <div className="text-xl font-extrabold text-slate-800">
+                Rp {stats.totalNominal.toLocaleString("id-ID")}
+              </div>
+            )}
+            <div className="text-xs font-semibold text-[#00a0a0]">Nominal</div>
           </div>
-          <div className="text-xs font-semibold text-[#00a0a0]">Pencapaian Rupiah</div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider">Total Gram</span>
-            <Scale className="w-5 h-5 text-amber-600" />
+        {/* Card 4: TOTAL GRAM */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+            <Coins className="w-6 h-6" />
           </div>
-          <div className="text-2xl font-extrabold text-slate-800">
-            {stats.totalGram.toFixed(2).replace(".", ",")}
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              TOTAL GRAM
+            </div>
+            {loading ? (
+              <div className="h-7 w-20 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
+            ) : (
+              <div className="text-2xl font-extrabold text-slate-800">
+                {stats.totalGram.toFixed(2).replace(".", ",")}
+              </div>
+            )}
+            <div className="text-xs font-semibold text-amber-600">Gram</div>
           </div>
-          <div className="text-xs font-semibold text-amber-600">Gram Emas</div>
         </div>
       </div>
     </div>

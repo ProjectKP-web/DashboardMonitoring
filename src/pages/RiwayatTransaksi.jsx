@@ -64,7 +64,26 @@ export default function RiwayatTransaksi() {
   const [daftarProduk, setDaftarProduk] = useState(defaultDaftarProduk);
 
   const fetchProductsFromDB = async () => {
+    const saved = localStorage.getItem("bsi_custom_products");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const formatted = parsed.map((p) => ({
+            id: p.id,
+            code: p.kode || p.code || p.name,
+            name: p.name === "QRIS" ? "QRIS - Merchant QRIS BSI" : p.description ? `${p.kode || p.name} - ${p.description}` : p.nama || p.name,
+            unit: p.measurement_type || "nominal"
+          }));
+          setDaftarProduk(formatted);
+        }
+      } catch (e) {
+        console.warn("Error parsing local products in RiwayatTransaksi:", e);
+      }
+    }
+
     if (!isSupabaseConfigured) return;
+
     try {
       const { data, error } = await supabase.from("products").select("*").order("id", { ascending: true });
       if (!error && data && data.length > 0) {
@@ -154,8 +173,8 @@ export default function RiwayatTransaksi() {
   };
 
   useEffect(() => {
+    fetchProductsFromDB();
     if (isSupabaseConfigured) {
-      fetchProductsFromDB();
       fetchTransactions();
     } else {
       setDataRiwayat([

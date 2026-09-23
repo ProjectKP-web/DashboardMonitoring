@@ -12,32 +12,64 @@ export default function EditTransactionModal({ isOpen, onClose, onSave, transact
   const [keterangan, setKeterangan] = useState("");
 
   const defaultDaftarProduk = [
-    { id: 1, code: "RB", name: "RB - Rekening BSI", unit: "nominal" },
-    { id: 2, code: "MAXI", name: "MAXI - Tabungan Maxi", unit: "nominal" },
-    { id: 3, code: "ABATANA", name: "ABATANA - Tabungan Abatana", unit: "nominal" },
-    { id: 4, code: "TAB EMAS", name: "Tab Emas", unit: "gram" },
-    { id: 5, code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", unit: "nominal" },
-    { id: 6, code: "PEMBIAYAAN", name: "Pembiayaan", unit: "nominal" },
-    { id: 7, code: "CILEM", name: "CILEM - Cicil Emas", unit: "gram" },
-    { id: 8, code: "QRIS", name: "QRIS - Merchant QRIS BSI", unit: "noa" }
+    { id: 1, code: "RB", name: "RB", unit: "nominal" },
+    { id: 2, code: "MAXI", name: "MAXI", unit: "nominal" },
+    { id: 3, code: "ABATANA", name: "ABATANA", unit: "nominal" },
+    { id: 4, code: "TAB EMAS", name: "TAB EMAS", unit: "gram" },
+    { id: 5, code: "TAB HAJI", name: "TAB HAJI", unit: "nominal" },
+    { id: 6, code: "PEMBIAYAAN", name: "PEMBIAYAAN", unit: "nominal" },
+    { id: 7, code: "CILEM", name: "CILEM", unit: "gram" },
+    { id: 8, code: "QRIS", name: "QRIS", unit: "noa" }
   ];
 
   const [daftarProduk, setDaftarProduk] = useState(defaultDaftarProduk);
 
   useEffect(() => {
-    if (isSupabaseConfigured) {
-      supabase.from("products").select("*").order("id", { ascending: true }).then(({ data, error }) => {
-        if (!error && data && data.length > 0) {
-          const formatted = data.map((p) => ({
-            id: p.id,
-            code: p.name,
-            name: p.name === "QRIS" ? "QRIS - Merchant QRIS BSI" : p.name,
-            unit: p.measurement_type || "nominal"
-          }));
-          setDaftarProduk(formatted);
+    const loadProducts = () => {
+      const saved = localStorage.getItem("bsi_custom_products");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const formatted = parsed.map((p) => {
+              const code = (p.kode || p.code || p.name || "").toUpperCase();
+              return {
+                id: p.id,
+                code: code,
+                name: code,
+                unit: p.measurement_type || "nominal"
+              };
+            });
+            setDaftarProduk(formatted);
+          }
+        } catch (e) {
+          console.warn("Error parsing local products in EditTransactionModal:", e);
         }
-      });
-    }
+      }
+
+      if (isSupabaseConfigured) {
+        supabase.from("products").select("*").order("id", { ascending: true }).then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            const formatted = data.map((p) => {
+              const code = (p.name || "").toUpperCase();
+              return {
+                id: p.id,
+                code: code,
+                name: code,
+                unit: p.measurement_type || "nominal"
+              };
+            });
+            setDaftarProduk(formatted);
+          }
+        });
+      }
+    };
+
+    loadProducts();
+    window.addEventListener("bsi_products_updated", loadProducts);
+    return () => {
+      window.removeEventListener("bsi_products_updated", loadProducts);
+    };
   }, []);
 
   useEffect(() => {

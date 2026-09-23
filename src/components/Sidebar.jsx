@@ -156,16 +156,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
           ))}
         </div>
 
-        {/* Bottom Card Support Banner */}
-        <div className="p-3 m-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center space-x-3">
-          <div className="p-2.5 bg-slate-200/70 rounded-lg text-slate-700">
-            <Headphones className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-slate-800">Butuh Bantuan?</div>
-            <div className="text-[11px] text-slate-500">Hubungi IT Support</div>
-          </div>
-        </div>
+        
       </aside>
     </>
   );
