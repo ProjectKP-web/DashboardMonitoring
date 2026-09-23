@@ -85,12 +85,23 @@ export default function ProfilSaya() {
         console.error("Error saving profile:", error);
         alert(`Gagal menyimpan profil: ${error.message}`);
       } else {
-        // Update Supabase Auth user password if new password was provided
+        // Synchronize with Supabase Auth (auth.users)
+        const authUpdates = {};
         if (newPassword && newPassword.trim().length >= 6) {
+          authUpdates.password = newPassword.trim();
+        }
+        if (email && email.trim() && email.trim() !== (user?.email || profile?.email)) {
+          authUpdates.email = email.trim();
+        }
+
+        if (Object.keys(authUpdates).length > 0) {
           try {
-            await supabase.auth.updateUser({ password: newPassword.trim() });
+            const { error: updateAuthErr } = await supabase.auth.updateUser(authUpdates);
+            if (updateAuthErr) {
+              console.warn("Supabase Auth update warning:", updateAuthErr.message);
+            }
           } catch (authErr) {
-            console.warn("Auth password update note:", authErr.message);
+            console.warn("Auth update note:", authErr.message);
           }
         }
 

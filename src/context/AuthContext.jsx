@@ -286,38 +286,65 @@ export function AuthProvider({ children }) {
       });
 
       if (error) {
-        // Smart Sync Fallback: Jika login gagal karena user baru ditambahkan manual di tabel profiles database
-        const { data: profileRecord } = await supabase
-          .from("profiles")
-          .select("*")
-          .or(`email.eq.${targetEmail},NIP.eq.${targetEmail},nip.eq.${targetEmail}`)
-          .maybeSingle();
+        // Smart Sync Fallback: Cari di tabel profiles berdasarkan email atau NIP
+        let profileRecord = null;
+        try {
+          const { data: pByEmail } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("email", targetEmail)
+            .maybeSingle();
+          profileRecord = pByEmail;
+        } catch (e) {}
 
-        if (profileRecord && profileRecord.email) {
+        if (!profileRecord) {
+          try {
+            const { data: pByNip } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("NIP", targetEmail)
+              .maybeSingle();
+            profileRecord = pByNip;
+          } catch (e) {}
+        }
+
+        if (profileRecord) {
           const profilePass = profileRecord.password || "";
           if (profilePass && profilePass === password) {
-            // Daftarkan akun secara otomatis ke Supabase Auth
+            // Check if profileRecord.email can sign in
+            if (profileRecord.email && profileRecord.email !== targetEmail) {
+              const altSignIn = await supabase.auth.signInWithPassword({
+                email: profileRecord.email,
+                password: password,
+              });
+              if (altSignIn.data?.user) {
+                const userProf = await fetchUserProfile(altSignIn.data.user.id, altSignIn.data.user.email);
+                localStorage.setItem("bsi_last_activity", Date.now().toString());
+                return { user: altSignIn.data.user, profile: userProf };
+              }
+            }
+
+            // Daftarkan akun secara otomatis ke Supabase Auth jika belum ada
             const { data: autoSignUp, error: autoSignUpErr } = await supabase.auth.signUp({
-              email: profileRecord.email,
+              email: profileRecord.email || targetEmail,
               password: password,
               options: {
                 data: {
                   full_name: profileRecord.full_name || "Admin",
-                  nip: profileRecord.NIP || profileRecord.nip || "-",
+                  nip: profileRecord.NIP || "-",
                   role: profileRecord.role || "kabag",
                 },
               },
             });
 
             if (!autoSignUpErr && autoSignUp?.user) {
-              // Update baris profiles agar ID sesuai UUID auth.users baru
               await supabase
                 .from("profiles")
                 .update({ id: autoSignUp.user.id })
-                .eq("email", profileRecord.email);
+                .eq("email", profileRecord.email || targetEmail);
 
               const retrySignIn = await supabase.auth.signInWithPassword({
-                email: profileRecord.email,
+                email: profileRecord.email || targetEmail,
                 password: password,
               });
 
@@ -327,6 +354,18 @@ export function AuthProvider({ children }) {
                 return { user: retrySignIn.data.user, profile: userProf };
               }
             }
+
+            // Direct profile auth fallback session if Auth signup exists or is blocked
+            const isKabagRole = profileRecord.role === "kabag" || profileRecord.role === "kepala_bagian" || profileRecord.role === "admin";
+            const normalizedProf = {
+              ...profileRecord,
+              role: isKabagRole ? "kabag" : profileRecord.role || "pegawai"
+            };
+            setProfile(normalizedProf);
+            setUser({ id: profileRecord.id, email: profileRecord.email || targetEmail });
+            setRole(normalizedProf.role);
+            localStorage.setItem("bsi_last_activity", Date.now().toString());
+            return { user: { id: profileRecord.id, email: profileRecord.email || targetEmail }, profile: normalizedProf };
           }
         }
 
