@@ -119,7 +119,7 @@ export default function Login() {
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
-            Email / NIP
+            Email
           </label>
           <input
             type="text"
