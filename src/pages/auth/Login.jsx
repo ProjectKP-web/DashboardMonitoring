@@ -126,7 +126,7 @@ export default function Login() {
             required
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            placeholder="Masukkan Email atau NIP"
+            placeholder="Masukkan Email"
             className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-[#00a0a0]"
           />
         </div>
