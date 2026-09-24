@@ -39,7 +39,6 @@ const formatPeriodeMonthYearUpper = (periodeStr) => {
 
 export default function RekapBulanan({ showChart = false, showKpi = false, isPegawaiView = false }) {
   const { user, profile } = useAuth();
-  const currentUserId = user?.id || profile?.id;
 
   const [periode, setPeriode] = useState(getCurrentPeriode);
   const [loading, setLoading] = useState(false);
@@ -71,27 +70,8 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
   const [grandProductStats, setGrandProductStats] = useState({});
   const [allTransactions, setAllTransactions] = useState([]);
 
-  const [totalRow, setTotalRow] = useState({
-    nama: "TOTAL",
-    rbNoa: 0,
-    rbNom: "0",
-    maxiNoa: 0,
-    maxiNom: "0",
-    abatanaNoa: 0,
-    abatanaNom: "0",
-    emasNoa: 0,
-    emasGram: "0,00",
-    hajiNoa: 0,
-    hajiNom: "0",
-    pembiayaanNoa: 0,
-    pembiayaanNom: "0",
-    cilemNoa: 0,
-    cilemGram: "0,00",
-    qrisNoa: 0,
-    qrisNom: "-"
-  });
-
   const fetchMonthlyRecap = async () => {
+    // 1. Determine master products
     const saved = localStorage.getItem("bsi_custom_products");
     let currentMaster = defaultMasterProducts;
     if (saved) {
@@ -101,26 +81,91 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
           currentMaster = parsed.map((p) => ({
             id: p.id,
             code: p.kode || p.code || p.name,
-            name: p.name || p.nama || p.kode,
+            name: p.kode || p.name || p.nama,
             unit: p.measurement_type || "nominal"
           }));
-          setMasterProducts(currentMaster);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("Parsing bsi_custom_products error:", e);
+      }
     }
 
     if (!isSupabaseConfigured) {
+      setMasterProducts(currentMaster);
+
+      const demoEmployees = [
+        { id: 1, nama: "VANNY" },
+        { id: 2, nama: "BETHARI" },
+        { id: 3, nama: "ZHARIF" },
+        { id: 4, nama: "RIZKY" },
+        { id: 5, nama: "LILI" },
+        { id: 6, nama: "NISA" },
+        { id: 7, nama: "ARDI" },
+        { id: 8, nama: "OKTA" },
+        { id: 9, nama: "HENDRA" },
+        { id: 10, nama: "RICO" },
+        { id: 11, nama: "RIAN" },
+        { id: 12, nama: "SYAIFUL" },
+        { id: 13, nama: "RAHMAD" },
+        { id: 14, nama: "SUHADI" }
+      ];
+
+      const demoMatrix = {};
+      const grandStats = {};
+
+      currentMaster.forEach((p) => {
+        grandStats[p.id] = { noa: 0, nominal: 0, gram: 0 };
+      });
+
+      let grandNoa = 0;
+      let grandNominal = 0;
+      let grandGram = 0;
+
+      demoEmployees.forEach((emp) => {
+        demoMatrix[emp.id] = {};
+        currentMaster.forEach((p, idx) => {
+          const sampleNoa = (emp.id + idx) % 5 + 1;
+          const sampleNominal = ((emp.id * 2 + idx) % 8 + 1) * 5000000;
+          const sampleGram = Number((((emp.id + idx) % 6 + 1) * 2.5).toFixed(2));
+
+          const stats = {
+            noa: sampleNoa,
+            nominal: p.unit === "gram" || p.unit === "noa" ? 0 : sampleNominal,
+            gram: p.unit === "gram" ? sampleGram : 0
+          };
+
+          demoMatrix[emp.id][p.id] = stats;
+          grandStats[p.id].noa += stats.noa;
+          grandStats[p.id].nominal += stats.nominal;
+          grandStats[p.id].gram += stats.gram;
+
+          grandNoa += stats.noa;
+          grandNominal += stats.nominal;
+          grandGram += stats.gram;
+        });
+      });
+
+      const tableRows = demoEmployees.map((emp) => ({
+        id: emp.id,
+        nama: emp.nama,
+        pStats: demoMatrix[emp.id] || {}
+      }));
+
+      setDataPegawai(tableRows);
+      setGrandProductStats(grandStats);
       setKpi({
-        totalPegawai: 14,
-        totalProduk: 42,
-        totalNoa: isPegawaiView ? 11 : 185,
-        totalNominal: isPegawaiView ? 75000000 : 1248500000,
-        totalGram: isPegawaiView ? 30 : 236.5
+        totalPegawai: demoEmployees.length,
+        totalProduk: currentMaster.length * 5,
+        totalNoa: isPegawaiView ? 11 : grandNoa,
+        totalNominal: isPegawaiView ? 75000000 : grandNominal,
+        totalGram: isPegawaiView ? 30 : Number(grandGram.toFixed(2))
       });
       return;
     }
+
     setLoading(true);
     try {
+      // 1. Fetch DB Products
       const { data: dbProds } = await supabase.from("products").select("*").order("id", { ascending: true });
       if (dbProds && dbProds.length > 0) {
         currentMaster = dbProds.map((p) => ({
@@ -129,21 +174,11 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
           name: p.name,
           unit: p.measurement_type || "nominal"
         }));
-        setMasterProducts(currentMaster);
       }
+      setMasterProducts(currentMaster);
 
+      // 2. Fetch DB Pegawai
       const { data: dbPegawai } = await supabase.from("pegawai").select("*").order("nama", { ascending: true });
-      let txQuery = supabase.from("transactions").select("*, products(id, name, measurement_type)");
-
-      const { data: txs } = await txQuery;
-      setAllTransactions(txs || []);
-
-      const filteredTxs = (txs || []).filter((item) => {
-        const itemDate = item.transaction_date || "";
-        return !periode || itemDate.startsWith(periode);
-      });
-
-      // Build employee list directly from database pegawai table
       let employeeList = [];
       if (dbPegawai && dbPegawai.length > 0) {
         employeeList = dbPegawai.map((p) => ({
@@ -170,7 +205,17 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
         ];
       }
 
-      // Matrix: employee.id -> product.id -> { noa, nominal, gram }
+      // 3. Fetch Transactions
+      const txQuery = supabase.from("transactions").select("*, products(id, name, measurement_type)");
+      const { data: txs } = await txQuery;
+      setAllTransactions(txs || []);
+
+      const filteredTxs = (txs || []).filter((item) => {
+        const itemDate = item.transaction_date || "";
+        return !periode || itemDate.startsWith(periode);
+      });
+
+      // 4. Build Matrix
       const matrix = {};
       employeeList.forEach((emp) => {
         matrix[emp.id] = {};
@@ -183,19 +228,18 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
       let grandNominal = 0;
       let grandGram = 0;
 
-      const grandProductStats = {};
+      const grandStats = {};
       currentMaster.forEach((p) => {
-        grandProductStats[p.id] = { noa: 0, nominal: 0, gram: 0 };
+        grandStats[p.id] = { noa: 0, nominal: 0, gram: 0 };
       });
 
       filteredTxs.forEach((tx) => {
         const prodName = (tx.products?.name || "").toUpperCase();
         const matchProd = currentMaster.find(
-          (p) => p.id === Number(tx.product_id) || p.code.toUpperCase() === prodName
+          (p) => p.id === Number(tx.product_id) || p.code.toUpperCase() === prodName || p.name.toUpperCase() === prodName
         );
-        const pid = matchProd ? matchProd.id : 1;
+        const pid = matchProd ? matchProd.id : (currentMaster[0]?.id || 1);
 
-        // Target employee row strictly by pegawai_id (referral employee)
         const targetEmp = employeeList.find(
           (e) => String(e.id) === String(tx.pegawai_id) || (e.dbIds && e.dbIds.includes(tx.pegawai_id))
         );
@@ -210,10 +254,10 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
           matrix[targetEmp.id][pid].gram += gram;
         }
 
-        if (grandProductStats[pid]) {
-          grandProductStats[pid].noa += noa;
-          grandProductStats[pid].nominal += nominal;
-          grandProductStats[pid].gram += gram;
+        if (grandStats[pid]) {
+          grandStats[pid].noa += noa;
+          grandStats[pid].nominal += nominal;
+          grandStats[pid].gram += gram;
         }
 
         grandNoa += noa;
@@ -221,59 +265,20 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
         grandGram += gram;
       });
 
-      const tableRows = employeeList.map((emp) => {
-        const pStats = matrix[emp.id] || {};
-        return {
-          nama: emp.nama,
-          rbNoa: pStats[1]?.noa ? pStats[1].noa : "-",
-          rbNom: pStats[1]?.nominal ? Number(pStats[1].nominal).toLocaleString("id-ID") : "-",
-          maxiNoa: pStats[2]?.noa ? pStats[2].noa : "-",
-          maxiNom: pStats[2]?.nominal ? Number(pStats[2].nominal).toLocaleString("id-ID") : "-",
-          abatanaNoa: pStats[3]?.noa ? pStats[3].noa : "-",
-          abatanaNom: pStats[3]?.nominal ? Number(pStats[3].nominal).toLocaleString("id-ID") : "-",
-          emasNoa: pStats[4]?.noa ? pStats[4].noa : "-",
-          emasGram: pStats[4]?.gram ? Number(pStats[4].gram).toFixed(2).replace(".", ",") : "-",
-          hajiNoa: pStats[5]?.noa ? pStats[5].noa : "-",
-          hajiNom: pStats[5]?.nominal ? Number(pStats[5].nominal).toLocaleString("id-ID") : "-",
-          pembiayaanNoa: pStats[6]?.noa ? pStats[6].noa : "-",
-          pembiayaanNom: pStats[6]?.nominal ? Number(pStats[6].nominal).toLocaleString("id-ID") : "-",
-          cilemNoa: pStats[7]?.noa ? pStats[7].noa : "-",
-          cilemGram: pStats[7]?.gram ? Number(pStats[7].gram).toFixed(2).replace(".", ",") : "-",
-          qrisNoa: pStats[8]?.noa ? pStats[8].noa : "-",
-          qrisNom: "-"
-        };
-      });
+      const tableRows = employeeList.map((emp) => ({
+        id: emp.id,
+        nama: emp.nama,
+        pStats: matrix[emp.id] || {}
+      }));
 
       setDataPegawai(tableRows);
-
-      setTotalRow({
-        nama: "TOTAL",
-        rbNoa: grandProductStats[1]?.noa || "-",
-        rbNom: grandProductStats[1]?.nominal ? Number(grandProductStats[1].nominal).toLocaleString("id-ID") : "-",
-        maxiNoa: grandProductStats[2]?.noa || "-",
-        maxiNom: grandProductStats[2]?.nominal ? Number(grandProductStats[2].nominal).toLocaleString("id-ID") : "-",
-        abatanaNoa: grandProductStats[3]?.noa || "-",
-        abatanaNom: grandProductStats[3]?.nominal ? Number(grandProductStats[3].nominal).toLocaleString("id-ID") : "-",
-        emasNoa: grandProductStats[4]?.noa || "-",
-        emasGram: grandProductStats[4]?.gram ? Number(grandProductStats[4].gram).toFixed(2).replace(".", ",") : "-",
-        hajiNoa: grandProductStats[5]?.noa || "-",
-        hajiNom: grandProductStats[5]?.nominal ? Number(grandProductStats[5].nominal).toLocaleString("id-ID") : "-",
-        pembiayaanNoa: grandProductStats[6]?.noa || "-",
-        pembiayaanNom: grandProductStats[6]?.nominal ? Number(grandProductStats[6].nominal).toLocaleString("id-ID") : "-",
-        cilemNoa: grandProductStats[7]?.noa || "-",
-        cilemGram: grandProductStats[7]?.gram ? Number(grandProductStats[7].gram).toFixed(2).replace(".", ",") : "-",
-        qrisNoa: grandProductStats[8]?.noa || "-",
-        qrisNom: "-"
-      });
-
-      setGrandProductStats(grandProductStats);
-
+      setGrandProductStats(grandStats);
       setKpi({
         totalPegawai: employeeList.length,
         totalProduk: filteredTxs.length,
         totalNoa: grandNoa,
         totalNominal: grandNominal,
-        totalGram: grandGram
+        totalGram: Number(grandGram.toFixed(2))
       });
     } catch (err) {
       console.error("Recap query error:", err);
@@ -283,39 +288,30 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
   };
 
   useEffect(() => {
-    if (isSupabaseConfigured) {
+    fetchMonthlyRecap();
+
+    const handleProductsUpdated = () => {
       fetchMonthlyRecap();
-    } else {
-      setDataPegawai([
-        { nama: "VANNY", rbNoa: 5, rbNom: "50.000.000", maxiNoa: 3, maxiNom: "20.000.000", abatanaNoa: 2, abatanaNom: "15.000.000", emasNoa: 4, emasGram: "10,00", hajiNoa: 2, hajiNom: "20.000.000", pembiayaanNoa: 3, pembiayaanNom: "30.000.000", cilemNoa: 2, cilemGram: "5,00" },
-        { nama: "BETHARI", rbNoa: 3, rbNom: "30.000.000", maxiNoa: 2, maxiNom: "15.000.000", abatanaNoa: 1, abatanaNom: "10.000.000", emasNoa: 3, emasGram: "7,00", hajiNoa: 1, hajiNom: "10.000.000", pembiayaanNoa: 2, pembiayaanNom: "20.000.000", cilemNoa: 1, cilemGram: "2,00" },
-        { nama: "ZHARIF", rbNoa: 4, rbNom: "40.000.000", maxiNoa: 3, maxiNom: "25.000.000", abatanaNoa: 2, abatanaNom: "20.000.000", emasNoa: 5, emasGram: "12,00", hajiNoa: 2, hajiNom: "15.000.000", pembiayaanNoa: 4, pembiayaanNom: "40.000.000", cilemNoa: 3, cilemGram: "8,00" }
-      ]);
-      setTotalRow({
-        nama: "TOTAL",
-        rbNoa: 12, rbNom: "120.000.000", maxiNoa: 8, maxiNom: "60.000.000", abatanaNoa: 5, abatanaNom: "45.000.000",
-        emasNoa: 12, emasGram: "29,00", hajiNoa: 5, hajiNom: "45.000.000", pembiayaanNoa: 9, pembiayaanNom: "90.000.000",
-        cilemNoa: 6, cilemGram: "15,00", qrisNoa: 10, qrisNom: "-"
-      });
-      setGrandProductStats({
-        1: { noa: 12, nominal: 120000000, gram: 0 },
-        2: { noa: 8, nominal: 60000000, gram: 0 },
-        3: { noa: 5, nominal: 45000000, gram: 0 },
-        4: { noa: 12, nominal: 0, gram: 29 },
-        5: { noa: 5, nominal: 45000000, gram: 0 },
-        6: { noa: 9, nominal: 90000000, gram: 0 },
-        7: { noa: 6, nominal: 0, gram: 15 },
-        8: { noa: 10, nominal: 0, gram: 0 }
-      });
-      setKpi({
-        totalPegawai: 14,
-        totalNoa: 185,
-        totalNominal: 1248500000,
-        totalGram: 236.5
-      });
+    };
+
+    window.addEventListener("bsi_products_updated", handleProductsUpdated);
+
+    let channel = null;
+    if (isSupabaseConfigured) {
+      channel = supabase
+        .channel("realtime-rekap-bulanan-dynamic")
+        .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => fetchMonthlyRecap())
+        .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => fetchMonthlyRecap())
+        .subscribe();
     }
+
+    return () => {
+      window.removeEventListener("bsi_products_updated", handleProductsUpdated);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [periode]);
 
+  // Handle Export Excel dynamically based on masterProducts
   const handleExportExcel = () => {
     if (!dataPegawai || dataPegawai.length === 0) {
       alert("Tidak ada data rekap untuk di-export.");
@@ -329,81 +325,86 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
     const titleRow2 = [`KANTOR CABANG: KC PEKANBARU SUDIRMAN 1   |   PERIODE: ${periodeText}`];
     const blankRow = [];
 
-    // Row 1: Main Product Headers
-    const headerRow1 = [
-      "Nama Referral",
-      "RB", "",
-      "MAXI", "",
-      "ABATANA", "",
-      "TAB EMAS", "",
-      "TAB HAJI", "",
-      "PEMBIAYAAN", "",
-      "CILEM", "",
-      "QRIS"
-    ];
+    // Row 1 & 2 Headers
+    const headerRow1 = ["Nama Referral"];
+    const headerRow2 = [""];
 
-    // Row 2: Sub Headers
-    const headerRow2 = [
-      "",
-      "NOA", "Nominal",
-      "NOA", "Nominal",
-      "NOA", "Nominal",
-      "NOA", "Gram",
-      "NOA", "Nominal",
-      "NOA", "Nominal",
-      "NOA", "Gram",
-      "NOA"
-    ];
+    masterProducts.forEach((p) => {
+      headerRow1.push(p.name || p.code);
+      if (p.unit === "noa") {
+        headerRow2.push("NOA");
+      } else if (p.unit === "gram") {
+        headerRow1.push("");
+        headerRow2.push("NOA", "Gram");
+      } else {
+        headerRow1.push("");
+        headerRow2.push("NOA", "Nominal");
+      }
+    });
 
     // Data Rows
-    const rows = dataPegawai.map((row) => [
-      row.nama || "",
-      row.rbNoa || 0, row.rbNom || "0",
-      row.maxiNoa || 0, row.maxiNom || "0",
-      row.abatanaNoa || 0, row.abatanaNom || "0",
-      row.emasNoa || 0, row.emasGram || "0,00",
-      row.hajiNoa || 0, row.hajiNom || "0",
-      row.pembiayaanNoa || 0, row.pembiayaanNom || "0",
-      row.cilemNoa || 0, row.cilemGram || "0,00",
-      row.qrisNoa || 0
-    ]);
+    const rows = dataPegawai.map((row) => {
+      const r = [row.nama || ""];
+      masterProducts.forEach((p) => {
+        const stats = row.pStats?.[p.id] || { noa: 0, nominal: 0, gram: 0 };
+        if (p.unit === "noa") {
+          r.push(stats.noa || 0);
+        } else if (p.unit === "gram") {
+          r.push(stats.noa || 0);
+          r.push(stats.gram ? Number(stats.gram).toFixed(2).replace(".", ",") : "0,00");
+        } else {
+          r.push(stats.noa || 0);
+          r.push(stats.nominal ? Number(stats.nominal).toLocaleString("id-ID") : "0");
+        }
+      });
+      return r;
+    });
 
     // Total Row
-    const totalLine = [
-      "TOTAL",
-      totalRow.rbNoa || 0, totalRow.rbNom || "0",
-      totalRow.maxiNoa || 0, totalRow.maxiNom || "0",
-      totalRow.abatanaNoa || 0, totalRow.abatanaNom || "0",
-      totalRow.emasNoa || 0, totalRow.emasGram || "0,00",
-      totalRow.hajiNoa || 0, totalRow.hajiNom || "0",
-      totalRow.pembiayaanNoa || 0, totalRow.pembiayaanNom || "0",
-      totalRow.cilemNoa || 0, totalRow.cilemGram || "0,00",
-      totalRow.qrisNoa || 0
-    ];
+    const totalLine = ["TOTAL"];
+    masterProducts.forEach((p) => {
+      const stats = grandProductStats[p.id] || { noa: 0, nominal: 0, gram: 0 };
+      if (p.unit === "noa") {
+        totalLine.push(stats.noa || 0);
+      } else if (p.unit === "gram") {
+        totalLine.push(stats.noa || 0);
+        totalLine.push(stats.gram ? Number(stats.gram).toFixed(2).replace(".", ",") : "0,00");
+      } else {
+        totalLine.push(stats.noa || 0);
+        totalLine.push(stats.nominal ? Number(stats.nominal).toLocaleString("id-ID") : "0");
+      }
+    });
 
     const sheetData = [titleRow1, titleRow2, blankRow, headerRow1, headerRow2, ...rows, totalLine];
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
-    // Merge cells: Title rows + Product headers
-    ws["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 15 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 15 } },
-      { s: { r: 3, c: 0 }, e: { r: 4, c: 0 } },
-      { s: { r: 3, c: 1 }, e: { r: 3, c: 2 } },
-      { s: { r: 3, c: 3 }, e: { r: 3, c: 4 } },
-      { s: { r: 3, c: 5 }, e: { r: 3, c: 6 } },
-      { s: { r: 3, c: 7 }, e: { r: 3, c: 8 } },
-      { s: { r: 3, c: 9 }, e: { r: 3, c: 10 } },
-      { s: { r: 3, c: 11 }, e: { r: 3, c: 12 } },
-      { s: { r: 3, c: 13 }, e: { r: 3, c: 14 } },
-      { s: { r: 3, c: 15 }, e: { r: 4, c: 15 } }
+    // Calculate Merges
+    const totalCols = headerRow1.length;
+    const merges = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
+      { s: { r: 3, c: 0 }, e: { r: 4, c: 0 } }
     ];
+
+    let colIdx = 1;
+    masterProducts.forEach((p) => {
+      if (p.unit === "noa") {
+        merges.push({ s: { r: 3, c: colIdx }, e: { r: 4, c: colIdx } });
+        colIdx += 1;
+      } else {
+        merges.push({ s: { r: 3, c: colIdx }, e: { r: 3, c: colIdx + 1 } });
+        colIdx += 2;
+      }
+    });
+
+    ws["!merges"] = merges;
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Rekap Bulanan");
     XLSX.writeFile(wb, `Rekap_Bulanan_KC_Pekanbaru_${periodeText.replace(/\s+/g, "_")}.xlsx`);
   };
 
+  // Handle Export PDF dynamically based on masterProducts
   const handleExportPDF = () => {
     if (!dataPegawai || dataPegawai.length === 0) {
       alert("Tidak ada data rekap untuk di-export.");
@@ -416,84 +417,85 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
     // Header Title
     doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(0, 160, 160); // #00a0a0 BSI Teal
+    doc.setTextColor(0, 160, 160);
     doc.text("LAPORAN REKAP MONITORING BULANAN", 14, 12);
 
     doc.setFontSize(8.5);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(100, 116, 139); // Slate-500
+    doc.setTextColor(100, 116, 139);
     doc.text(`KANTOR CABANG: KC PEKANBARU SUDIRMAN 1   |   PERIODE: ${periodeText}`, 14, 17);
 
-    // Multi-level Header (2 rows)
-    const head = [
-      [
-        { content: "NAMA REFERRAL", rowSpan: 2, styles: { halign: "left", valign: "middle" } },
-        { content: "RB", colSpan: 2, styles: { halign: "center" } },
-        { content: "MAXI", colSpan: 2, styles: { halign: "center" } },
-        { content: "ABATANA", colSpan: 2, styles: { halign: "center" } },
-        { content: "TAB EMAS", colSpan: 2, styles: { halign: "center" } },
-        { content: "TAB HAJI", colSpan: 2, styles: { halign: "center" } },
-        { content: "PEMBIAYAAN", colSpan: 2, styles: { halign: "center" } },
-        { content: "CILEM", colSpan: 2, styles: { halign: "center" } },
-        { content: "QRIS", rowSpan: 2, styles: { halign: "center", valign: "middle" } }
-      ],
-      [
-        { content: "NOA", styles: { halign: "center" } },
-        { content: "NOMINAL", styles: { halign: "right" } },
-        { content: "NOA", styles: { halign: "center" } },
-        { content: "NOMINAL", styles: { halign: "right" } },
-        { content: "NOA", styles: { halign: "center" } },
-        { content: "NOMINAL", styles: { halign: "right" } },
-        { content: "NOA", styles: { halign: "center" } },
-        { content: "GRAM", styles: { halign: "right" } },
-        { content: "NOA", styles: { halign: "center" } },
-        { content: "NOMINAL", styles: { halign: "right" } },
-        { content: "NOA", styles: { halign: "center" } },
-        { content: "NOMINAL", styles: { halign: "right" } },
-        { content: "NOA", styles: { halign: "center" } },
-        { content: "GRAM", styles: { halign: "right" } }
-      ]
-    ];
+    // Dynamic Multi-level Header (2 rows)
+    const headRow1 = [{ content: "NAMA REFERRAL", rowSpan: 2, styles: { halign: "left", valign: "middle" } }];
+    const headRow2 = [];
 
-    // Table rows
-    const body = dataPegawai.map((row) => [
-      row.nama || "",
-      row.rbNoa || 0,
-      row.rbNom || "0",
-      row.maxiNoa || 0,
-      row.maxiNom || "0",
-      row.abatanaNoa || 0,
-      row.abatanaNom || "0",
-      row.emasNoa || 0,
-      row.emasGram || "0,00",
-      row.hajiNoa || 0,
-      row.hajiNom || "0",
-      row.pembiayaanNoa || 0,
-      row.pembiayaanNom || "0",
-      row.cilemNoa || 0,
-      row.cilemGram || "0,00",
-      row.qrisNoa || 0
-    ]);
+    masterProducts.forEach((p) => {
+      if (p.unit === "noa") {
+        headRow1.push({ content: p.name || p.code, rowSpan: 2, styles: { halign: "center", valign: "middle" } });
+      } else if (p.unit === "gram") {
+        headRow1.push({ content: p.name || p.code, colSpan: 2, styles: { halign: "center" } });
+        headRow2.push({ content: "NOA", styles: { halign: "center" } });
+        headRow2.push({ content: "GRAM", styles: { halign: "right" } });
+      } else {
+        headRow1.push({ content: p.name || p.code, colSpan: 2, styles: { halign: "center" } });
+        headRow2.push({ content: "NOA", styles: { halign: "center" } });
+        headRow2.push({ content: "NOMINAL", styles: { halign: "right" } });
+      }
+    });
 
-    // Add TOTAL row
-    body.push([
-      "TOTAL",
-      totalRow.rbNoa || 0,
-      totalRow.rbNom || "0",
-      totalRow.maxiNoa || 0,
-      totalRow.maxiNom || "0",
-      totalRow.abatanaNoa || 0,
-      totalRow.abatanaNom || "0",
-      totalRow.emasNoa || 0,
-      totalRow.emasGram || "0,00",
-      totalRow.hajiNoa || 0,
-      totalRow.hajiNom || "0",
-      totalRow.pembiayaanNoa || 0,
-      totalRow.pembiayaanNom || "0",
-      totalRow.cilemNoa || 0,
-      totalRow.cilemGram || "0,00",
-      totalRow.qrisNoa || 0
-    ]);
+    const head = [headRow1, headRow2];
+
+    // Data rows
+    const body = dataPegawai.map((row) => {
+      const r = [row.nama || ""];
+      masterProducts.forEach((p) => {
+        const stats = row.pStats?.[p.id] || { noa: 0, nominal: 0, gram: 0 };
+        if (p.unit === "noa") {
+          r.push(stats.noa || 0);
+        } else if (p.unit === "gram") {
+          r.push(stats.noa || 0);
+          r.push(stats.gram ? Number(stats.gram).toFixed(2).replace(".", ",") : "0,00");
+        } else {
+          r.push(stats.noa || 0);
+          r.push(stats.nominal ? Number(stats.nominal).toLocaleString("id-ID") : "0");
+        }
+      });
+      return r;
+    });
+
+    // Total Row
+    const totalLine = ["TOTAL"];
+    masterProducts.forEach((p) => {
+      const stats = grandProductStats[p.id] || { noa: 0, nominal: 0, gram: 0 };
+      if (p.unit === "noa") {
+        totalLine.push(stats.noa || 0);
+      } else if (p.unit === "gram") {
+        totalLine.push(stats.noa || 0);
+        totalLine.push(stats.gram ? Number(stats.gram).toFixed(2).replace(".", ",") : "0,00");
+      } else {
+        totalLine.push(stats.noa || 0);
+        totalLine.push(stats.nominal ? Number(stats.nominal).toLocaleString("id-ID") : "0");
+      }
+    });
+    body.push(totalLine);
+
+    // Dynamic Column Styles
+    const columnStyles = {
+      0: { halign: "left", fontStyle: "bold" }
+    };
+    let cIdx = 1;
+    masterProducts.forEach((p) => {
+      if (p.unit === "noa") {
+        columnStyles[cIdx] = { halign: "center" };
+        cIdx += 1;
+      } else {
+        columnStyles[cIdx] = { halign: "center" };
+        columnStyles[cIdx + 1] = { halign: "right" };
+        cIdx += 2;
+      }
+    });
+
+    const calculatedFontSize = Math.max(4.5, Math.min(6.5, 90 / (cIdx + 1)));
 
     autoTable(doc, {
       startY: 21,
@@ -501,8 +503,8 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
       body: body,
       theme: "grid",
       styles: {
-        fontSize: 6.5,
-        cellPadding: 1.2,
+        fontSize: calculatedFontSize,
+        cellPadding: 1,
         textColor: [30, 41, 59],
         lineColor: [203, 213, 225],
         lineWidth: 0.1
@@ -510,27 +512,9 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
       headStyles: {
         fillColor: [0, 160, 160],
         textColor: [255, 255, 255],
-        fontStyle: "bold",
-        fontSize: 7
+        fontStyle: "bold"
       },
-      columnStyles: {
-        0: { halign: "left", fontStyle: "bold" },
-        1: { halign: "center" },
-        2: { halign: "right" },
-        3: { halign: "center" },
-        4: { halign: "right" },
-        5: { halign: "center" },
-        6: { halign: "right" },
-        7: { halign: "center" },
-        8: { halign: "right" },
-        9: { halign: "center" },
-        10: { halign: "right" },
-        11: { halign: "center" },
-        12: { halign: "right" },
-        13: { halign: "center" },
-        14: { halign: "right" },
-        15: { halign: "center", fontStyle: "bold" }
-      },
+      columnStyles: columnStyles,
       didParseCell: function (data) {
         if (data.section === "body" && data.row.index === body.length - 1) {
           data.cell.styles.fillColor = [241, 245, 249];
@@ -582,10 +566,9 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
         </div>
       </div>
 
-      {/* KPI Cards Row (Rendered when showKpi is true) */}
+      {/* KPI Cards Row */}
       {showKpi && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: TOTAL PEGAWAI AKTIF / TOTAL PRODUK */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
             <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
               {isPegawaiView ? <Package className="w-6 h-6" /> : <Users className="w-6 h-6" />}
@@ -598,7 +581,7 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
                 <div className="h-7 w-16 bg-slate-200/70 animate-pulse rounded-md my-1"></div>
               ) : (
                 <div className="text-2xl font-extrabold text-slate-800">
-                  {isPegawaiView ? kpi.totalProduk : kpi.totalPegawai}
+                  {isPegawaiView ? masterProducts.length : kpi.totalPegawai}
                 </div>
               )}
               <div className="text-xs font-semibold text-[#00a0a0]">
@@ -607,7 +590,6 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
             </div>
           </div>
 
-          {/* Card 2: TOTAL NOA */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
             <div className="w-12 h-12 rounded-full border-2 border-[#f0b43c] bg-amber-50 flex items-center justify-center text-[#f0b43c] shrink-0 font-bold text-xs">
               NOA
@@ -625,7 +607,6 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
             </div>
           </div>
 
-          {/* Card 3: TOTAL NOMINAL */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
             <div className="w-12 h-12 rounded-full bg-[#e6f5f5] flex items-center justify-center text-[#00a0a0] shrink-0">
               <Banknote className="w-6 h-6" />
@@ -645,7 +626,6 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
             </div>
           </div>
 
-          {/* Card 4: TOTAL GRAM */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
             <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
               <Coins className="w-6 h-6" />
@@ -667,7 +647,7 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
         </div>
       )}
 
-      {/* Product Comparison Chart (Rendered when showChart is true) */}
+      {/* Product Comparison Chart */}
       {showChart && (
         <ProductComparisonChart
           masterProducts={masterProducts}
@@ -712,93 +692,124 @@ export default function RekapBulanan({ showChart = false, showKpi = false, isPeg
           </div>
         </div>
 
-        {/* Scrollable Table Container */}
+        {/* Scrollable Dynamic Table */}
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-xs text-center border-collapse">
             <thead>
-              {/* Row 1 Header */}
+              {/* Row 1 Header - Dynamic Products */}
               <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                <th className="py-3 px-4 text-left border-r border-slate-200 min-w-[140px]">
+                <th
+                  rowSpan={2}
+                  className="py-3 px-4 text-left border-r border-slate-200 align-middle font-bold text-slate-700 whitespace-nowrap min-w-[240px]"
+                >
                   Nama Referral
                 </th>
-                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">RB</th>
-                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">MAXI</th>
-                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">ABATANA</th>
-                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">TAB EMAS</th>
-                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">TAB HAJI</th>
-                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">PEMBIAYAAN</th>
-                <th colSpan="2" className="py-2 px-2 border-r border-slate-200">CILEM</th>
-                <th className="py-2 px-2">QRIS</th>
+                {masterProducts.map((p) => (
+                  <th
+                    key={p.id}
+                    colSpan={p.unit === "noa" ? 1 : 2}
+                    className="py-2.5 px-2 border-r border-slate-200 uppercase align-middle"
+                  >
+                    {p.name || p.code}
+                  </th>
+                ))}
               </tr>
-              {/* Row 2 Sub-Header */}
+              {/* Row 2 Sub-Header - Dynamic Units */}
               <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                <th className="border-r border-slate-200"></th>
-                <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2 border-r border-slate-200">Nominal</th>
-                <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2 border-r border-slate-200">Nominal</th>
-                <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2 border-r border-slate-200">Nominal</th>
-                <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2 border-r border-slate-200">Gram</th>
-                <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2 border-r border-slate-200">Nominal</th>
-                <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2 border-r border-slate-200">Nominal</th>
-                <th className="py-2 px-2 border-r border-slate-200">NOA</th>
-                <th className="py-2 px-2 border-r border-slate-200">Gram</th>
-                <th className="py-2 px-2">NOA</th>
+                {masterProducts.map((p) =>
+                  p.unit === "noa" ? (
+                    <th key={`${p.id}-sub`} className="py-2 px-2 border-r border-slate-200 min-w-[55px]">
+                      NOA
+                    </th>
+                  ) : p.unit === "gram" ? (
+                    <React.Fragment key={p.id}>
+                      <th className="py-2 px-2 border-r border-slate-200 min-w-[50px]">NOA</th>
+                      <th className="py-2 px-2 border-r border-slate-200 min-w-[85px]">Gram</th>
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment key={p.id}>
+                      <th className="py-2 px-2 border-r border-slate-200 min-w-[50px]">NOA</th>
+                      <th className="py-2 px-2 border-r border-slate-200 min-w-[115px]">Nominal</th>
+                    </React.Fragment>
+                  )
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {dataPegawai
                 .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-                .map((row, idx) => (
+                .map((row) => (
                   <tr
-                    key={idx}
+                    key={row.id || row.nama}
                     className="hover:bg-slate-50/80 transition-colors font-medium"
                   >
-                    <td className="py-2.5 px-4 text-left font-bold text-slate-800 border-r border-slate-100">
+                    <td className="py-2.5 px-4 text-left font-bold text-slate-800 border-r border-slate-100 whitespace-nowrap">
                       {row.nama}
                     </td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.rbNoa}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.rbNom}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.maxiNoa}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.maxiNom}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.abatanaNoa}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.abatanaNom}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.emasNoa}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.emasGram}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.hajiNoa}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.hajiNom}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.pembiayaanNoa}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.pembiayaanNom}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.cilemNoa}</td>
-                    <td className="py-2.5 px-2 border-r border-slate-100">{row.cilemGram}</td>
-                    <td className="py-2.5 px-2 font-bold text-slate-800">{row.qrisNoa}</td>
+                    {masterProducts.map((p) => {
+                      const stats = row.pStats?.[p.id] || {};
+                      if (p.unit === "noa") {
+                        return (
+                          <td key={p.id} className="py-2.5 px-2 border-r border-slate-100 font-bold text-slate-800">
+                            {stats.noa || "-"}
+                          </td>
+                        );
+                      }
+                      if (p.unit === "gram") {
+                        return (
+                          <React.Fragment key={p.id}>
+                            <td className="py-2.5 px-2 border-r border-slate-100">{stats.noa || "-"}</td>
+                            <td className="py-2.5 px-2 border-r border-slate-100">
+                              {stats.gram ? Number(stats.gram).toFixed(2).replace(".", ",") : "-"}
+                            </td>
+                          </React.Fragment>
+                        );
+                      }
+                      return (
+                        <React.Fragment key={p.id}>
+                          <td className="py-2.5 px-2 border-r border-slate-100">{stats.noa || "-"}</td>
+                          <td className="py-2.5 px-2 border-r border-slate-100">
+                            {stats.nominal ? Number(stats.nominal).toLocaleString("id-ID") : "-"}
+                          </td>
+                        </React.Fragment>
+                      );
+                    })}
                   </tr>
                 ))}
 
-              {/* TOTAL ROW */}
+              {/* DYNAMIC TOTAL ROW */}
               <tr className="bg-[#e6f5f5] font-extrabold text-[#008888] border-t-2 border-slate-200">
                 <td className="py-3 px-4 text-left border-r border-slate-200 font-black">
-                  {totalRow.nama}
+                  TOTAL
                 </td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.rbNoa}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.rbNom}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.maxiNoa}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.maxiNom}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.abatanaNoa}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.abatanaNom}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.emasNoa}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.emasGram}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.hajiNoa}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.hajiNom}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.pembiayaanNoa}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.pembiayaanNom}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.cilemNoa}</td>
-                <td className="py-3 px-2 border-r border-slate-200">{totalRow.cilemGram}</td>
-                <td className="py-3 px-2 font-black">{totalRow.qrisNoa}</td>
+                {masterProducts.map((p) => {
+                  const stats = grandProductStats[p.id] || {};
+                  if (p.unit === "noa") {
+                    return (
+                      <td key={p.id} className="py-3 px-2 border-r border-slate-200 font-black">
+                        {stats.noa || "-"}
+                      </td>
+                    );
+                  }
+                  if (p.unit === "gram") {
+                    return (
+                      <React.Fragment key={p.id}>
+                        <td className="py-3 px-2 border-r border-slate-200">{stats.noa || "-"}</td>
+                        <td className="py-3 px-2 border-r border-slate-200">
+                          {stats.gram ? Number(stats.gram).toFixed(2).replace(".", ",") : "-"}
+                        </td>
+                      </React.Fragment>
+                    );
+                  }
+                  return (
+                    <React.Fragment key={p.id}>
+                      <td className="py-3 px-2 border-r border-slate-200">{stats.noa || "-"}</td>
+                      <td className="py-3 px-2 border-r border-slate-200">
+                        {stats.nominal ? Number(stats.nominal).toLocaleString("id-ID") : "-"}
+                      </td>
+                    </React.Fragment>
+                  );
+                })}
               </tr>
             </tbody>
           </table>

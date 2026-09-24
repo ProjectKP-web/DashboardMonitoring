@@ -105,12 +105,47 @@ export default function RekapBulananSaya() {
             name: p.name || p.nama || p.kode,
             unit: p.measurement_type || "nominal"
           }));
-          setMasterProducts(currentMaster);
         }
       } catch (e) {}
     }
+    setMasterProducts(currentMaster);
 
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      const offlineList = defaultPegawai.map((emp) => {
+        const productMap = {};
+        currentMaster.forEach((p) => {
+          productMap[p.code] = {
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            unit: p.unit,
+            noa: Math.floor(Math.random() * 3) + 1,
+            nominal: p.unit === "gram" || p.unit === "noa" ? 0 : (Math.floor(Math.random() * 10) + 1) * 5000000,
+            gram: p.unit === "gram" ? Number((Math.random() * 5 + 1).toFixed(2)) : 0
+          };
+        });
+
+        const totalNoa = Object.values(productMap).reduce((acc, curr) => acc + curr.noa, 0);
+        const totalNominal = Object.values(productMap).reduce((acc, curr) => acc + curr.nominal, 0);
+        const totalGram = Object.values(productMap).reduce((acc, curr) => acc + curr.gram, 0);
+
+        return {
+          id: emp.id,
+          nama: emp.nama,
+          totalNoa,
+          totalNominal,
+          totalGram: Number(totalGram.toFixed(2)),
+          productMap,
+          transactionsList: [
+            { id: 1, tanggal: "03/09/2026", produk: currentMaster[0]?.name || "RB", produkCode: currentMaster[0]?.code || "RB", noa: 2, nominal: "20.000.000", gram: "-", unit: "nominal" },
+            { id: 2, tanggal: "01/09/2026", produk: currentMaster[1]?.name || "MAXI", produkCode: currentMaster[1]?.code || "MAXI", noa: 1, nominal: "10.000.000", gram: "-", unit: "nominal" }
+          ]
+        };
+      });
+      setRekapPegawaiList(offlineList);
+      return;
+    }
+
     setLoading(true);
     try {
       // 1. Fetch products
@@ -232,48 +267,37 @@ export default function RekapBulananSaya() {
   };
 
   useEffect(() => {
-    if (isSupabaseConfigured) {
-      fetchRecapData();
+    fetchRecapData();
 
-      const channel = supabase
+    const handleProductsUpdated = () => {
+      fetchRecapData();
+    };
+
+    window.addEventListener("bsi_products_updated", handleProductsUpdated);
+    window.addEventListener("storage", handleProductsUpdated);
+
+    let channel = null;
+    if (isSupabaseConfigured) {
+      channel = supabase
         .channel("realtime-rekap-bulanan-saya")
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "transactions" },
-          () => {
-            fetchRecapData();
-          }
+          () => fetchRecapData()
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "products" },
+          () => fetchRecapData()
         )
         .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    } else {
-      // Offline fallback with mock employee list sorted A-Z
-      const offlineList = defaultPegawai.map((emp) => ({
-        id: emp.id,
-        nama: emp.nama,
-        totalNoa: Math.floor(Math.random() * 10) + 1,
-        totalNominal: Math.floor(Math.random() * 50) * 1000000,
-        totalGram: (Math.random() * 10).toFixed(2),
-        productMap: {
-          RB: { code: "RB", name: "RB - Rekening BSI", noa: 2, nominal: 20000000, gram: 0, unit: "nominal" },
-          MAXI: { code: "MAXI", name: "MAXI - Tabungan Maxi", noa: 1, nominal: 10000000, gram: 0, unit: "nominal" },
-          ABATANA: { code: "ABATANA", name: "ABATANA - Tabungan Abatana", noa: 1, nominal: 5000000, gram: 0, unit: "nominal" },
-          "TAB EMAS": { code: "TAB EMAS", name: "Tab Emas", noa: 2, nominal: 0, gram: 5.0, unit: "gram" },
-          "TAB HAJI": { code: "TAB HAJI", name: "Tab Haji - Tabungan Haji", noa: 1, nominal: 10000000, gram: 0, unit: "nominal" },
-          PEMBIAYAAN: { code: "PEMBIAYAAN", name: "Pembiayaan", noa: 1, nominal: 15000000, gram: 0, unit: "nominal" },
-          CILEM: { code: "CILEM", name: "CILEM - Cicil Emas", noa: 1, nominal: 0, gram: 2.5, unit: "gram" },
-          QRIS: { code: "QRIS", name: "QRIS - Merchant QRIS BSI", noa: 3, nominal: 0, gram: 0, unit: "noa" }
-        },
-        transactionsList: [
-          { id: 1, tanggal: "03/09/2026", produk: "RB - Rekening BSI", produkCode: "RB", noa: 2, nominal: "20.000.000", gram: "-", unit: "nominal" },
-          { id: 2, tanggal: "01/09/2026", produk: "MAXI - Tabungan Maxi", produkCode: "MAXI", noa: 1, nominal: "10.000.000", gram: "-", unit: "nominal" }
-        ]
-      }));
-      setRekapPegawaiList(offlineList);
     }
+
+    return () => {
+      window.removeEventListener("bsi_products_updated", handleProductsUpdated);
+      window.removeEventListener("storage", handleProductsUpdated);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [user, profile, periode]);
 
   // Filter & Search
